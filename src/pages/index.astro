@@ -1,0 +1,1065 @@
+---
+const pageTitle = "Coming Soon | Eschaton Science";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Eschaton Science is preparing its first public release."
+    />
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <main class="stage" aria-label="Coming Soon">
+      <section class="lockup">
+        <h1>soon.</h1>
+
+        <figure class="graph-shell">
+          <canvas id="j63-graph" aria-hidden="true"></canvas>
+          <figcaption class="sr-only">
+            Animated white WebGL graph projection.
+          </figcaption>
+        </figure>
+
+        <div class="projection-dots" aria-label="Graph projection selector">
+          <button
+            class="projection-dot is-active"
+            type="button"
+            aria-label="Canonical thin 12-state lift"
+            data-projection-mode="thin12"
+          ></button>
+          <button
+            class="projection-dot"
+            type="button"
+            aria-label="J(6,3) graph"
+            data-projection-mode="j63"
+          ></button>
+          <button
+            class="projection-dot"
+            type="button"
+            aria-label="HC J(8,3) coherence-layer Johnson graph"
+            data-projection-mode="hcj83"
+          ></button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+
+<script>
+  import {
+    BufferGeometry,
+    Euler,
+    Float32BufferAttribute,
+    Group,
+    LineBasicMaterial,
+    LineSegments,
+    Mesh,
+    MeshBasicMaterial,
+    PerspectiveCamera,
+    Quaternion,
+    Raycaster,
+    Scene,
+    SphereGeometry,
+    Vector2,
+    Vector3,
+    WebGLRenderer,
+  } from "three";
+
+  type Atom = {
+    id: number;
+    label: string;
+    set: number[];
+    mask: number;
+    complementId: number;
+    outer6: number[];
+    inner6: number[];
+  };
+  type HcAtom = {
+    id: number;
+    label: string;
+    set: number[];
+    outer8: number[];
+  };
+
+  type ProjectionMode = "j63" | "hcj83" | "thin12";
+  type LineLayer = {
+    edges: [string, string][];
+    positions: Float32BufferAttribute;
+  };
+  type SceneState = {
+    group: Group;
+    lineLayers: LineLayer[];
+    nodeMeshes: Map<string, Mesh>;
+    positions: Map<string, Vector3>;
+  };
+  type ModeConfig = {
+    distance: number;
+    rotation: [number, number, number];
+    projection: string;
+    title: string;
+  };
+
+  const canvas = document.querySelector<HTMLCanvasElement>("#j63-graph");
+  const modeButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>("[data-projection-mode]"),
+  ];
+
+  if (!canvas) {
+    throw new Error("J(6,3) canvas was not found.");
+  }
+
+  const WHITE = 0xffffff;
+  const INTERNAL_ROTATION_SPEED = 0.44275;
+  const FULLSCREEN_CAMERA_DISTANCE = 15.3;
+  const J63_SPEED_NORMALIZATION = 0.3;
+  const J63_PROJECTION_SCALE = 1.56;
+  const THIN12_PROJECTION_SCALE = 1.38;
+  const THIN12_SECTION_SIZE = 0.018;
+  const THIN12_ANCHOR_SIZE = 0.02;
+  const HC_PROJECTION_SCALE = 1.31;
+  const HC_EDGE_OPACITY = 0.34;
+  const HC_NODE_OPACITY = 0.72;
+  const HC_NODE_RADIUS = 0.018;
+  const PROJECTION_6_TO_3 = [
+    [-0.3655736581436624, 0.6268801991813208, -0.3036313403631366],
+    [-0.7221911745265163, -0.41725750862998834, 0.3176637973511847],
+    [0.32831198671803014, -0.5117580331118852, -0.3370453139128483],
+    [-0.058288794101768106, -0.015706214620807003, 0.6104672014040253],
+    [-0.18899174118916912, 0.2578402189912208, -0.08135332213223956],
+    [-0.44485007084317657, -0.3229440186852541, -0.5603656041898762],
+  ] as const;
+  const SO6_PLANES = [
+    [0, 1, 1],
+    [2, 3, 2],
+    [4, 5, 3],
+    [0, 3, 4],
+    [1, 4, 5],
+    [2, 5, 6],
+  ] as const;
+  const SO8_PLANES = [
+    [0, 1, 0.9],
+    [2, 3, 1.2],
+    [4, 5, 1.5],
+    [6, 7, 1.8],
+    [0, 4, 1.1],
+    [1, 5, 1.35],
+    [2, 6, 1.6],
+    [3, 7, 1.25],
+  ] as const;
+  const SO12_PLANES = [
+    [0, 7, 0.9],
+    [1, 4, 1.35],
+    [2, 5, 1.8],
+    [3, 6, 1.15],
+    [8, 10, 1.55],
+    [9, 11, 1.25],
+    [0, 5, 0.72],
+    [7, 2, 1.05],
+    [1, 9, 0.84],
+    [4, 11, 1.42],
+    [3, 8, 1.68],
+    [6, 10, 0.96],
+  ] as const;
+  const PROJECTION_8_TO_3 = Array.from({ length: 8 }, (_, index) => {
+    const theta = (index * Math.PI * 2) / 8;
+    return [
+      Math.cos(theta) * 0.66 + Math.cos(theta * 3) * 0.16,
+      Math.sin(theta) * 0.66 - Math.sin(theta * 3) * 0.16,
+      Math.cos(theta * 2 + Math.PI / 5) * 0.42,
+    ] as const;
+  });
+  const PROJECTION_12_TO_3 = Array.from({ length: 12 }, (_, index) => {
+    const theta = (index * Math.PI * 2) / 12;
+    return [
+      Math.cos(theta) * 0.62 + Math.cos(theta * 5) * 0.18,
+      Math.sin(theta) * 0.62 + Math.sin(theta * 5) * 0.18,
+      Math.cos(theta * 3 + Math.PI / 7) * 0.5,
+    ] as const;
+  });
+  const PROJECTION_MODES: ProjectionMode[] = ["thin12", "j63", "hcj83"];
+  const MODE_CONFIG: Record<ProjectionMode, ModeConfig> = {
+    j63: {
+      distance: FULLSCREEN_CAMERA_DISTANCE,
+      rotation: [-0.48, 0.62, 0.08],
+      projection: "canonical-6d-to-3d",
+      title: "J(6,3) atom",
+    },
+    hcj83: {
+      distance: FULLSCREEN_CAMERA_DISTANCE,
+      rotation: [-0.52, 0.5, 0.1],
+      projection: "coherence-layer-8d-to-3d",
+      title: "HC J(8,3) atom",
+    },
+    thin12: {
+      distance: FULLSCREEN_CAMERA_DISTANCE,
+      rotation: [-0.44, 0.58, -0.1],
+      projection: "entry-2349-thin12",
+      title: "section state",
+    },
+  };
+
+  const chooseTriples = (width = 6) => {
+    const triples: number[][] = [];
+    for (let a = 1; a <= width - 2; a += 1) {
+      for (let b = a + 1; b <= width - 1; b += 1) {
+        for (let c = b + 1; c <= width; c += 1) {
+          triples.push([a, b, c]);
+        }
+      }
+    }
+    return triples;
+  };
+
+  const maskOf = (set: number[]) =>
+    set.reduce((mask, item) => mask | (1 << (item - 1)), 0);
+
+  const intersectionSize = (left: number[], right: number[]) =>
+    left.filter((item) => right.includes(item)).length;
+
+  const vector6FromSet = (set: number[], magnitude: number) => {
+    const vector = Array.from({ length: 6 }, () => -magnitude);
+    for (const item of set) vector[item - 1] = magnitude;
+    return vector;
+  };
+
+  const vector8FromSet = (set: number[], magnitude: number) => {
+    const vector = Array.from({ length: 8 }, () => -magnitude);
+    for (const item of set) vector[item - 1] = magnitude;
+    return vector;
+  };
+
+  const rotate6 = (source: number[], theta: number) => {
+    const vector = source.slice();
+    for (const [i, j, speed] of SO6_PLANES) {
+      const angle = speed * J63_SPEED_NORMALIZATION * theta;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const vi = vector[i];
+      const vj = vector[j];
+      vector[i] = c * vi - s * vj;
+      vector[j] = s * vi + c * vj;
+    }
+    return vector;
+  };
+
+  const rotate8 = (source: number[], theta: number) => {
+    const vector = source.slice();
+    for (const [i, j, speed] of SO8_PLANES) {
+      const angle = speed * theta;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const vi = vector[i];
+      const vj = vector[j];
+      vector[i] = c * vi - s * vj;
+      vector[j] = s * vi + c * vj;
+    }
+    return vector;
+  };
+
+  const rotate12 = (source: number[], theta: number) => {
+    const vector = source.slice();
+    for (const [i, j, speed] of SO12_PLANES) {
+      const angle = speed * theta;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const vi = vector[i];
+      const vj = vector[j];
+      vector[i] = c * vi - s * vj;
+      vector[j] = s * vi + c * vj;
+    }
+    return vector;
+  };
+
+  const project6To3 = (point: number[], scale = 2.15) => {
+    const projected = new Vector3();
+    for (let i = 0; i < PROJECTION_6_TO_3.length; i += 1) {
+      projected.x += point[i] * PROJECTION_6_TO_3[i][0];
+      projected.y += point[i] * PROJECTION_6_TO_3[i][1];
+      projected.z += point[i] * PROJECTION_6_TO_3[i][2];
+    }
+    return projected.multiplyScalar(scale);
+  };
+
+  const project8To3 = (point: number[], scale = 1.72) => {
+    const projected = new Vector3();
+    for (let i = 0; i < PROJECTION_8_TO_3.length; i += 1) {
+      projected.x += point[i] * PROJECTION_8_TO_3[i][0];
+      projected.y += point[i] * PROJECTION_8_TO_3[i][1];
+      projected.z += point[i] * PROJECTION_8_TO_3[i][2];
+    }
+    return projected.multiplyScalar(scale);
+  };
+
+  const project12To3 = (point: number[], scale = THIN12_PROJECTION_SCALE) => {
+    const projected = new Vector3();
+    for (let i = 0; i < PROJECTION_12_TO_3.length; i += 1) {
+      projected.x += point[i] * PROJECTION_12_TO_3[i][0];
+      projected.y += point[i] * PROJECTION_12_TO_3[i][1];
+      projected.z += point[i] * PROJECTION_12_TO_3[i][2];
+    }
+    return projected.multiplyScalar(scale);
+  };
+
+  const buildGraph = () => {
+    const atoms = chooseTriples().map<Atom>((set, id) => ({
+      id,
+      label: set.join(""),
+      set,
+      mask: maskOf(set),
+      complementId: -1,
+      outer6: vector6FromSet(set, 0.5),
+      inner6: vector6FromSet(set, 0.23),
+    }));
+
+    const byMask = new Map(atoms.map((atom) => [atom.mask, atom]));
+    for (const atom of atoms) {
+      atom.complementId = byMask.get(0b111111 ^ atom.mask)?.id ?? -1;
+    }
+
+    const johnsonEdges: [number, number][] = [];
+    const complementEdges: [number, number][] = [];
+    for (let left = 0; left < atoms.length; left += 1) {
+      for (let right = left + 1; right < atoms.length; right += 1) {
+        const shared = intersectionSize(atoms[left].set, atoms[right].set);
+        if (shared === 2) johnsonEdges.push([left, right]);
+        if (shared === 0) complementEdges.push([left, right]);
+      }
+    }
+
+    return { atoms, complementEdges, johnsonEdges };
+  };
+
+  const buildHcGraph = () => {
+    const atoms = chooseTriples(8).map<HcAtom>((set, id) => ({
+      id,
+      label: set.join(""),
+      set,
+      outer8: vector8FromSet(set, 0.38),
+    }));
+
+    const johnsonEdges: [number, number][] = [];
+    for (let left = 0; left < atoms.length; left += 1) {
+      for (let right = left + 1; right < atoms.length; right += 1) {
+        if (intersectionSize(atoms[left].set, atoms[right].set) === 2) {
+          johnsonEdges.push([left, right]);
+        }
+      }
+    }
+
+    return { atoms, johnsonEdges };
+  };
+
+  const graph = buildGraph();
+  const hcGraph = buildHcGraph();
+  const scene = new Scene();
+  const camera = new PerspectiveCamera(38, 1, 0.1, 100);
+  const renderer = new WebGLRenderer({
+    alpha: true,
+    antialias: true,
+    canvas,
+    powerPreference: "high-performance",
+  });
+  const root = new Group();
+  const raycaster = new Raycaster();
+  const pointer = new Vector2(10, 10);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const DRAG_ROTATION_SCALE = 0.007;
+  const INERTIA_DAMPING = 3.4;
+  const MIN_INERTIA_SPEED = 0.002;
+  const scenes: Record<ProjectionMode, SceneState> = {
+    j63: {
+      group: new Group(),
+      lineLayers: [],
+      nodeMeshes: new Map(),
+      positions: new Map(),
+    },
+    hcj83: {
+      group: new Group(),
+      lineLayers: [],
+      nodeMeshes: new Map(),
+      positions: new Map(),
+    },
+    thin12: {
+      group: new Group(),
+      lineLayers: [],
+      nodeMeshes: new Map(),
+      positions: new Map(),
+    },
+  };
+
+  let activeMode: ProjectionMode = "thin12";
+  let hoverNode: Mesh | null = null;
+  let dragging = false;
+  let previousPointer = { x: 0, y: 0, time: 0 };
+  const spinVelocity = new Vector3();
+  const targetQuaternion = new Quaternion().setFromEuler(
+    new Euler(...MODE_CONFIG.thin12.rotation)
+  );
+  const dragAxisX = new Vector3();
+  const dragAxisY = new Vector3();
+  const dragAxisZ = new Vector3();
+  const dragStep = new Quaternion();
+  let cameraDistance = FULLSCREEN_CAMERA_DISTANCE;
+  let previousFrameSeconds = 0;
+
+  scene.add(root);
+  for (const mode of PROJECTION_MODES) root.add(scenes[mode].group);
+  root.quaternion.copy(targetQuaternion);
+  camera.position.set(0, 0, cameraDistance);
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  const refreshProjected = (theta: number) => {
+    for (const atom of graph.atoms) {
+      scenes.j63.positions.set(String(atom.id), project6To3(rotate6(atom.outer6, theta), J63_PROJECTION_SCALE));
+    }
+  };
+
+  const refreshHcJ83 = (theta: number) => {
+    for (const atom of hcGraph.atoms) {
+      scenes.hcj83.positions.set(String(atom.id), project8To3(rotate8(atom.outer8, theta), HC_PROJECTION_SCALE));
+    }
+  };
+
+  const refreshThin12 = (theta: number) => {
+    for (const [id, vector] of thin12StateVectors) {
+      scenes.thin12.positions.set(id, project12To3(rotate12(vector, theta)));
+    }
+  };
+
+  const makeLineSegments = (
+    state: SceneState,
+    edges: [string, string][],
+    opacity: number
+  ) => {
+    const geometry = new BufferGeometry();
+    const vertices = new Float32Array(edges.length * 2 * 3);
+    geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+
+    const lines = new LineSegments(
+      geometry,
+      new LineBasicMaterial({
+        color: WHITE,
+        opacity,
+        transparent: true,
+        depthWrite: false,
+      })
+    );
+    state.group.add(lines);
+
+    const layer = {
+      edges,
+      positions: geometry.getAttribute("position") as Float32BufferAttribute,
+    };
+    state.lineLayers.push(layer);
+    return layer;
+  };
+
+  const unitNodeGeometry = new SphereGeometry(1, 16, 10);
+  const addStaticNode = (
+    state: SceneState,
+    id: string,
+    label: string,
+    position: Vector3,
+    size: number,
+    opacity: number,
+    status = ""
+  ) => {
+    const node = new Mesh(
+      unitNodeGeometry,
+      new MeshBasicMaterial({
+        color: WHITE,
+        transparent: true,
+        opacity,
+      })
+    );
+    node.scale.setScalar(size);
+    node.userData.atom = { label, status };
+    node.userData.baseScale = size;
+    node.userData.baseOpacity = opacity;
+    node.userData.hoverOpacity = Math.min(1, opacity + 0.22);
+    state.positions.set(id, position);
+    state.nodeMeshes.set(id, node);
+    state.group.add(node);
+  };
+
+  makeLineSegments(
+    scenes.j63,
+    graph.complementEdges.map(([left, right]) => [String(left), String(right)]),
+    0.1
+  );
+  makeLineSegments(
+    scenes.j63,
+    graph.johnsonEdges.map(([left, right]) => [String(left), String(right)]),
+    0.34
+  );
+
+  const nodeGeometry = new SphereGeometry(0.018, 12, 8);
+  for (const atom of graph.atoms) {
+    const node = new Mesh(
+      nodeGeometry,
+      new MeshBasicMaterial({
+        color: WHITE,
+        transparent: true,
+        opacity: 0.72,
+      })
+    );
+    node.userData.atom = atom;
+    node.userData.baseScale = 1;
+    node.userData.baseOpacity = 0.72;
+    node.userData.hoverOpacity = 0.9;
+    scenes.j63.nodeMeshes.set(String(atom.id), node);
+    scenes.j63.group.add(node);
+  }
+
+  makeLineSegments(
+    scenes.hcj83,
+    hcGraph.johnsonEdges.map(([left, right]) => [String(left), String(right)]),
+    HC_EDGE_OPACITY
+  );
+
+  const hcNodeGeometry = new SphereGeometry(HC_NODE_RADIUS, 12, 8);
+  for (const atom of hcGraph.atoms) {
+    const node = new Mesh(
+      hcNodeGeometry,
+      new MeshBasicMaterial({
+        color: WHITE,
+        transparent: true,
+        opacity: HC_NODE_OPACITY,
+      })
+    );
+    node.userData.atom = atom;
+    node.userData.baseScale = 1;
+    node.userData.baseOpacity = HC_NODE_OPACITY;
+    node.userData.hoverOpacity = 0.9;
+    scenes.hcj83.nodeMeshes.set(String(atom.id), node);
+    scenes.hcj83.group.add(node);
+  }
+
+  const thin12StateIds = [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+  ] as const;
+  const thin12ModulePairs = new Map<string, string>([
+    ["1", "4"],
+    ["4", "1"],
+    ["2", "5"],
+    ["5", "2"],
+    ["3", "6"],
+    ["6", "3"],
+    ["8", "10"],
+    ["10", "8"],
+    ["9", "11"],
+    ["11", "9"],
+  ]);
+  const thin12VectorFor = (id: string) => {
+    const state = Number(id);
+    const vector = Array.from({ length: 12 }, () => -0.14);
+    vector[state] = 1;
+
+    const pairMate = thin12ModulePairs.get(id);
+    if (pairMate) vector[Number(pairMate)] = -0.52;
+    if (state === 0) vector[7] = -0.66;
+    if (state === 7) vector[0] = -0.66;
+    if (state > 0 && state < 7) vector[0] += 0.3;
+    if (state > 7) vector[7] += 0.3;
+
+    return vector;
+  };
+  const thin12StateVectors = new Map(
+    thin12StateIds.map((id) => [`s${id}`, thin12VectorFor(id)] as const)
+  );
+
+  for (const id of thin12StateIds) {
+    const anchor = id === "0" || id === "7";
+    addStaticNode(
+      scenes.thin12,
+      `s${id}`,
+      id,
+      new Vector3(),
+      anchor ? THIN12_ANCHOR_SIZE : THIN12_SECTION_SIZE,
+      anchor ? 0.82 : 0.72,
+      anchor ? "anchor" : "section"
+    );
+  }
+
+  const thin12Blocks = {
+    UA: ["0"],
+    LA: ["7"],
+    U14: ["1", "4"],
+    U25: ["2", "5"],
+    U36: ["3", "6"],
+    L810: ["8", "10"],
+    L911: ["9", "11"],
+  } as const;
+  type Thin12Block = keyof typeof thin12Blocks;
+  const thin12FullBlockEdges = (
+    relation: Partial<Record<Thin12Block, Thin12Block[]>>
+  ) => {
+    const edges: [string, string][] = [];
+    for (const [sourceBlock, targetBlocks] of Object.entries(relation) as [
+      Thin12Block,
+      Thin12Block[],
+    ][]) {
+      for (const source of thin12Blocks[sourceBlock]) {
+        for (const targetBlock of targetBlocks) {
+          for (const target of thin12Blocks[targetBlock]) {
+            edges.push([`s${source}`, `s${target}`]);
+          }
+        }
+      }
+    }
+    return edges;
+  };
+  const thin12AEdges = () => {
+    const moduleAnchor = new Map<string, string>([
+      ["1", "0"],
+      ["4", "0"],
+      ["2", "0"],
+      ["5", "0"],
+      ["3", "0"],
+      ["6", "0"],
+      ["8", "7"],
+      ["10", "7"],
+      ["9", "7"],
+      ["11", "7"],
+    ]);
+    const edges: [string, string][] = [
+      ["s0", "s0"],
+      ["s7", "s7"],
+    ];
+    for (const [state, anchor] of moduleAnchor) {
+      edges.push([`s${state}`, `s${state}`], [`s${state}`, `s${anchor}`]);
+    }
+    return edges;
+  };
+  const thin12ExactRelations = {
+    p: thin12FullBlockEdges({
+      UA: ["UA"],
+      LA: ["LA"],
+      U14: ["UA"],
+      U25: ["UA"],
+      U36: ["UA"],
+      L810: ["LA"],
+      L911: ["LA"],
+    }),
+    q: thin12FullBlockEdges({
+      UA: ["UA", "LA"],
+      LA: ["UA", "LA"],
+      U14: ["UA"],
+      U25: ["UA", "LA"],
+      U36: ["UA", "LA"],
+      L810: ["UA"],
+      L911: ["UA", "LA"],
+    }),
+    a: thin12AEdges(),
+    b: thin12FullBlockEdges({
+      UA: ["UA", "LA"],
+      LA: ["UA", "LA"],
+      U14: ["UA", "U14", "U25"],
+      U25: ["UA", "LA", "U14", "L911"],
+      U36: ["UA", "LA", "U36", "L810"],
+      L810: ["UA", "U36"],
+      L911: ["UA", "LA", "U25", "L911"],
+    }),
+  };
+  const uniqueVisibleEdges = (edges: [string, string][]) => {
+    const seen = new Set<string>();
+    const visible: [string, string][] = [];
+    for (const [source, target] of edges) {
+      if (source === target) continue;
+      const key = source < target ? `${source}:${target}` : `${target}:${source}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      visible.push([source, target]);
+    }
+    return visible;
+  };
+  const thin12VisibleEdges = uniqueVisibleEdges([
+    ...thin12ExactRelations.b,
+    ...thin12ExactRelations.q,
+    ...thin12ExactRelations.a,
+    ...thin12ExactRelations.p,
+  ]);
+  makeLineSegments(scenes.thin12, thin12VisibleEdges, 0.3);
+
+  const updateGeometry = () => {
+    const state = scenes[activeMode];
+    for (const { edges, positions } of state.lineLayers) {
+      let cursor = 0;
+      for (const [left, right] of edges) {
+        const a = state.positions.get(left) ?? new Vector3();
+        const b = state.positions.get(right) ?? new Vector3();
+        positions.setXYZ(cursor, a.x, a.y, a.z);
+        positions.setXYZ(cursor + 1, b.x, b.y, b.z);
+        cursor += 2;
+      }
+      positions.needsUpdate = true;
+    }
+
+    for (const [id, node] of state.nodeMeshes) {
+      node.position.copy(state.positions.get(id) ?? new Vector3());
+      const hovered = hoverNode === node;
+      const baseScale = Number(node.userData.baseScale ?? 1);
+      const baseOpacity = Number(node.userData.baseOpacity ?? 0.72);
+      const hoverOpacity = Number(node.userData.hoverOpacity ?? 0.9);
+      node.scale.setScalar(baseScale * (hovered ? 1.25 : 1));
+      (node.material as MeshBasicMaterial).opacity = hovered ? hoverOpacity : baseOpacity;
+    }
+  };
+
+  const resize = () => {
+    const { width, height } = canvas.getBoundingClientRect();
+    const nextWidth = Math.max(1, Math.floor(width));
+    const nextHeight = Math.max(1, Math.floor(height));
+    renderer.setSize(nextWidth, nextHeight, false);
+    camera.aspect = nextWidth / nextHeight;
+    camera.updateProjectionMatrix();
+  };
+
+  const updateHover = () => {
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects([...scenes[activeMode].nodeMeshes.values()], false)[0];
+    hoverNode = hit?.object instanceof Mesh ? hit.object : null;
+    const atom = hoverNode?.userData.atom as { label?: string } | undefined;
+    canvas.dataset.hoverAtom = atom?.label ?? "";
+    canvas.title = atom?.label ? `${MODE_CONFIG[activeMode].title} ${atom.label}` : "";
+  };
+
+  const applyFreeRotation = (pitchDelta: number, yawDelta: number, rollDelta = 0) => {
+    if (!pitchDelta && !yawDelta && !rollDelta) return;
+
+    if (pitchDelta) {
+      dragAxisX.set(1, 0, 0).applyQuaternion(targetQuaternion).normalize();
+      dragStep.setFromAxisAngle(dragAxisX, pitchDelta);
+      targetQuaternion.premultiply(dragStep);
+    }
+    if (yawDelta) {
+      dragAxisY.set(0, 1, 0).applyQuaternion(targetQuaternion).normalize();
+      dragStep.setFromAxisAngle(dragAxisY, yawDelta);
+      targetQuaternion.premultiply(dragStep);
+    }
+    if (rollDelta) {
+      dragAxisZ.set(0, 0, 1).applyQuaternion(targetQuaternion).normalize();
+      dragStep.setFromAxisAngle(dragAxisZ, rollDelta);
+      targetQuaternion.premultiply(dragStep);
+    }
+
+    targetQuaternion.normalize();
+  };
+
+  const applyReleaseInertia = (deltaSeconds: number) => {
+    if (dragging || reducedMotion.matches) return;
+
+    const speed = spinVelocity.length();
+    if (speed < MIN_INERTIA_SPEED) {
+      spinVelocity.set(0, 0, 0);
+      return;
+    }
+
+    applyFreeRotation(
+      spinVelocity.x * deltaSeconds,
+      spinVelocity.y * deltaSeconds,
+      spinVelocity.z * deltaSeconds
+    );
+
+    const drag = Math.exp(-INERTIA_DAMPING * deltaSeconds);
+    spinVelocity.multiplyScalar(drag);
+  };
+
+  const animate = (time = 0) => {
+    const seconds = time / 1000;
+    const deltaSeconds = previousFrameSeconds
+      ? Math.min(0.05, seconds - previousFrameSeconds)
+      : 0;
+    const theta = reducedMotion.matches ? 0 : seconds * INTERNAL_ROTATION_SPEED;
+
+    previousFrameSeconds = seconds;
+    applyReleaseInertia(deltaSeconds);
+    if (activeMode === "j63") refreshProjected(theta);
+    if (activeMode === "hcj83") refreshHcJ83(theta);
+    if (activeMode === "thin12") refreshThin12(theta);
+    const rotationSettle = deltaSeconds ? 1 - Math.exp(-12 * deltaSeconds) : 1;
+    root.quaternion.slerp(targetQuaternion, rotationSettle);
+    camera.position.z += (cameraDistance - camera.position.z) * 0.12;
+    updateHover();
+    updateGeometry();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
+
+    if (!dragging) return;
+    const dx = event.clientX - previousPointer.x;
+    const dy = event.clientY - previousPointer.y;
+    const deltaSeconds = Math.max(0.016, (event.timeStamp - previousPointer.time) / 1000);
+    previousPointer = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    const pitchDelta = dy * DRAG_ROTATION_SCALE;
+    const yawDelta = dx * DRAG_ROTATION_SCALE;
+    applyFreeRotation(pitchDelta, yawDelta);
+    spinVelocity.set(pitchDelta / deltaSeconds, yawDelta / deltaSeconds, 0);
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    dragging = true;
+    spinVelocity.set(0, 0, 0);
+    previousPointer = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    canvas.setPointerCapture(event.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", onPointerMove);
+
+  canvas.addEventListener("pointerup", (event) => {
+    dragging = false;
+    canvas.releasePointerCapture(event.pointerId);
+  });
+
+  canvas.addEventListener("pointerleave", () => {
+    dragging = false;
+    pointer.set(10, 10);
+  });
+
+  canvas.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      cameraDistance = Math.max(10, Math.min(24, cameraDistance + event.deltaY * 0.006));
+    },
+    { passive: false }
+  );
+
+  const setProjectionMode = (mode: ProjectionMode) => {
+    activeMode = mode;
+    hoverNode = null;
+    spinVelocity.set(0, 0, 0);
+    for (const projectionMode of PROJECTION_MODES) {
+      scenes[projectionMode].group.visible = projectionMode === mode;
+    }
+    cameraDistance = MODE_CONFIG[mode].distance;
+    targetQuaternion.setFromEuler(new Euler(...MODE_CONFIG[mode].rotation));
+    root.quaternion.copy(targetQuaternion);
+    for (const button of modeButtons) {
+      const active = button.dataset.projectionMode === mode;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    canvas.dataset.projection = MODE_CONFIG[mode].projection;
+    canvas.dataset.vertices = String(scenes[mode].nodeMeshes.size);
+    canvas.dataset.johnsonEdges = mode === "j63" ? String(graph.johnsonEdges.length) : "";
+    canvas.dataset.complementEdges = mode === "j63" ? String(graph.complementEdges.length) : "";
+    canvas.dataset.hcJohnsonEdges = mode === "hcj83" ? String(hcGraph.johnsonEdges.length) : "";
+    canvas.dataset.hcVertices = mode === "hcj83" ? String(hcGraph.atoms.length) : "";
+    canvas.dataset.thinStates = mode === "thin12" ? String(thin12StateIds.length) : "";
+    canvas.dataset.thin12P = mode === "thin12" ? String(thin12ExactRelations.p.length) : "";
+    canvas.dataset.thin12Q = mode === "thin12" ? String(thin12ExactRelations.q.length) : "";
+    canvas.dataset.thin12A = mode === "thin12" ? String(thin12ExactRelations.a.length) : "";
+    canvas.dataset.thin12B = mode === "thin12" ? String(thin12ExactRelations.b.length) : "";
+    canvas.dataset.thin12VisibleEdges = mode === "thin12" ? String(thin12VisibleEdges.length) : "";
+    updateGeometry();
+  };
+
+  for (const button of modeButtons) {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.projectionMode;
+      if (PROJECTION_MODES.includes(mode as ProjectionMode)) {
+        setProjectionMode(mode as ProjectionMode);
+      }
+    });
+  }
+
+  new ResizeObserver(resize).observe(canvas);
+  refreshProjected(0);
+  refreshHcJ83(0);
+  refreshThin12(0);
+  setProjectionMode("thin12");
+  updateGeometry();
+  resize();
+
+  (
+    window as typeof window & {
+      __J63_GRAPH__: Record<string, number | string>;
+    }
+  ).__J63_GRAPH__ = {
+    atoms: graph.atoms.length,
+    complementEdges: graph.complementEdges.length,
+    hcJohnsonEdges: hcGraph.johnsonEdges.length,
+    hcVertices: hcGraph.atoms.length,
+    johnsonEdges: graph.johnsonEdges.length,
+    thin12AEdges: thin12ExactRelations.a.length,
+    thin12BEdges: thin12ExactRelations.b.length,
+    thin12PEdges: thin12ExactRelations.p.length,
+    thin12QEdges: thin12ExactRelations.q.length,
+    thin12States: thin12StateIds.length,
+    thin12VisibleEdges: thin12VisibleEdges.length,
+    projection: "entry-2349-thin12",
+  };
+
+  requestAnimationFrame(animate);
+</script>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+    background: #000;
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+    margin: 0;
+    background: #000;
+  }
+
+  body {
+    overflow: hidden;
+  }
+
+  .stage {
+    min-height: 100svh;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    background: #000;
+    color: #fff;
+  }
+
+  .lockup {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  h1 {
+    position: fixed;
+    top: clamp(80px, 20svh, 190px);
+    left: 50%;
+    z-index: 2;
+    margin: 0;
+    color: #fff;
+    font-size: clamp(3.25rem, 10vw, 8.5rem);
+    font-weight: 200;
+    letter-spacing: 0;
+    line-height: 0.88;
+    text-align: center;
+    text-shadow:
+      0 0 12px rgb(255 255 255 / 0.14),
+      0 0 42px rgb(255 255 255 / 0.08);
+    transform: translate(-50%, -20%);
+    white-space: nowrap;
+  }
+
+  .graph-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    width: 100vw;
+    height: 100svh;
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  #j63-graph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    outline: none;
+    touch-action: none;
+  }
+
+  #j63-graph:active {
+    cursor: grabbing;
+  }
+
+  .projection-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    position: fixed;
+    bottom: clamp(34px, 8svh, 86px);
+    left: 50%;
+    z-index: 3;
+    min-height: 18px;
+    pointer-events: auto;
+    transform: translateX(-50%);
+  }
+
+  .projection-dot {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: 1px solid rgb(255 255 255 / 0.54);
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    opacity: 0.58;
+    transition:
+      background-color 160ms ease,
+      opacity 160ms ease,
+      transform 160ms ease;
+  }
+
+  .projection-dot.is-active {
+    background: #fff;
+    opacity: 0.9;
+    transform: scale(1.15);
+  }
+
+  .projection-dot:hover {
+    opacity: 1;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 620px) {
+    h1 {
+      top: clamp(64px, 19svh, 132px);
+      font-size: clamp(3rem, 18vw, 5.8rem);
+      line-height: 0.95;
+      white-space: normal;
+    }
+
+    .graph-shell {
+      width: 100vw;
+      height: 100svh;
+    }
+  }
+</style>
