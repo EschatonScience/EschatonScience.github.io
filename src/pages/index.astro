@@ -1,5 +1,20 @@
 ---
 const pageTitle = "Coming Soon | Eschaton Science";
+const benchmarkRows = [
+  { cases: 1000, zeta: 1.948, kissat: 2.578, cadical: 3.364, zetaKissat: "1.32x", zetaCadical: "1.73x" },
+  { cases: 2000, zeta: 4.712, kissat: 6.956, cadical: 10.402, zetaKissat: "1.48x", zetaCadical: "2.21x" },
+  { cases: 3000, zeta: 5.632, kissat: 13.479, cadical: 16.333, zetaKissat: "2.39x", zetaCadical: "2.90x" },
+  { cases: 4000, zeta: 7.981, kissat: 18.956, cadical: 23.602, zetaKissat: "2.38x", zetaCadical: "2.96x" },
+  { cases: 5000, zeta: 10.487, kissat: 27.259, cadical: 30.047, zetaKissat: "2.60x", zetaCadical: "2.87x" },
+];
+const solverBars = [
+  { key: "cadical", label: "CaDiCaL" },
+  { key: "kissat", label: "Kissat" },
+  { key: "zeta", label: "ζ" },
+] as const;
+const maxBenchmarkSeconds = Math.max(
+  ...benchmarkRows.flatMap((row) => [row.zeta, row.kissat, row.cadical])
+);
 ---
 
 <!doctype html>
@@ -16,35 +31,58 @@ const pageTitle = "Coming Soon | Eschaton Science";
   <body>
     <main class="stage" aria-label="Coming Soon">
       <section class="lockup">
-        <h1>soon.</h1>
+        <div class="headline-stack">
+          <h1>We know the endgame.</h1>
+        </div>
+
+        <section class="benchmark-chart" aria-label="Zeta benchmark dominance">
+          <div class="benchmark-copy">
+            <p class="benchmark-kicker">SAT benchmark @ 32 variables</p>
+            <p>Runtime in seconds. Lower is better.</p>
+          </div>
+
+          <div class="bar-chart" aria-label="Grouped runtime bar chart">
+            {
+              benchmarkRows.map((row) => (
+                <div class="bar-group">
+                  <div class="bars" aria-label={`${row.cases} cases`}>
+                    {solverBars.map((solver) => {
+                      const seconds = row[solver.key];
+                      const height = `${(seconds / maxBenchmarkSeconds) * 100}%`;
+                      return (
+                        <div
+                          class={`bar bar-${solver.key}`}
+                          data-tooltip={`${solver.label}: ${seconds}s`}
+                          aria-label={`${solver.label}: ${seconds}s`}
+                          tabindex="0"
+                        >
+                          <span class="bar-fill" style={`height: ${height}`} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div class="case-label">{row.cases}</div>
+                </div>
+              ))
+            }
+          </div>
+
+          <div class="benchmark-legend" aria-label="Chart legend">
+            <span><i class="legend-cadical"></i>CaDiCaL</span>
+            <span><i class="legend-kissat"></i>Kissat</span>
+            <span><i class="legend-zeta"></i>ζ</span>
+          </div>
+        </section>
 
         <figure class="visual-shell">
-          <canvas id="visual-stage" aria-hidden="true"></canvas>
+          <div class="visual-frame">
+            <canvas id="visual-stage" aria-hidden="true"></canvas>
+          </div>
           <figcaption class="sr-only">
             Animated visual scene.
           </figcaption>
         </figure>
 
-        <div class="scene-dots" aria-label="Scene selector">
-          <button
-            class="scene-dot is-active"
-            type="button"
-            aria-label="Scene 1"
-            data-scene="s1"
-          ></button>
-          <button
-            class="scene-dot"
-            type="button"
-            aria-label="Scene 2"
-            data-scene="s2"
-          ></button>
-          <button
-            class="scene-dot"
-            type="button"
-            aria-label="Scene 3"
-            data-scene="s3"
-          ></button>
-        </div>
       </section>
     </main>
   </body>
@@ -53,9 +91,11 @@ const pageTitle = "Coming Soon | Eschaton Science";
 <script>
   import {
     BufferGeometry,
+    EdgesGeometry,
     Euler,
     Float32BufferAttribute,
     Group,
+    IcosahedronGeometry,
     LineBasicMaterial,
     LineSegments,
     Mesh,
@@ -73,22 +113,16 @@ const pageTitle = "Coming Soon | Eschaton Science";
   type PrimaryPoint = {
     id: number;
     a: number[];
-    b: number[];
-  };
-  type FlowPoint = {
-    id: string;
-    band: 0 | 1 | 2;
-    slot: number;
-    side: -1 | 0 | 1;
-    tone: "a" | "b" | "c";
-    weight: number;
-    offset: number;
   };
   type SurfacePoint = {
     id: string;
     vector: number[];
   };
-  type SceneKey = "s1" | "s2" | "s3";
+  type CrystalPoint = {
+    id: string;
+    vector: number[];
+  };
+  type SceneKey = "s1" | "s3" | "s6" | "ico";
   type LinkPair = [number, number];
   type LineLayer = {
     edges: [string, string][];
@@ -106,33 +140,30 @@ const pageTitle = "Coming Soon | Eschaton Science";
   };
 
   const canvas = document.querySelector<HTMLCanvasElement>("#visual-stage");
-  const modeButtons = [
-    ...document.querySelectorAll<HTMLButtonElement>("[data-scene]"),
-  ];
-
   if (!canvas) {
     throw new Error("Stage canvas was not found.");
   }
 
   const WHITE = 0xffffff;
-  const MINT = WHITE;
   const PRIMARY_NODE_COLOR = 0xffffff;
   const PRIMARY_MAIN_LINE_COLOR = 0xffffff;
   const PRIMARY_QUIET_LINE_COLOR = 0xffffff;
-  const PRIMARY_ACCENT_LINE_COLOR = MINT;
-  const PRIMARY_INNER_LINE_COLOR = WHITE;
-  const FLOW_NODE_COLOR = 0xffffff;
-  const FLOW_CONTOUR_COLOR = MINT;
-  const FLOW_CENTER_COLOR = 0xffffff;
-  const FLOW_BODY_LINE_COLOR = 0xffffff;
-  const FLOW_CORE_COLOR = WHITE;
-  const FLOW_RATE = 0.72;
-  const FLOW_BAND_RADII = [0.3, 0.92, 1.42] as const;
-  const FLOW_NODE_RADII = [0.018, 0.0145, 0.012] as const;
+  const PRIMARY_ACCENT_LINE_COLOR = WHITE;
   const SURFACE_NODE_COLOR = WHITE;
   const SURFACE_BODY_LINE_COLOR = WHITE;
   const SURFACE_BRIDGE_LINE_COLOR = WHITE;
+  const CRYSTAL_NODE_COLOR = WHITE;
+  const CRYSTAL_LINE_COLOR = WHITE;
+  const ICOSAHEDRON_NODE_COLOR = WHITE;
+  const ICOSAHEDRON_LINE_COLOR = WHITE;
   const SURFACE_NODE_RADIUS = 0.017;
+  const CRYSTAL_NODE_RADIUS = 0.016;
+  const CRYSTAL_SCALE = 1.2674;
+  const ICOSAHEDRON_GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+  const ICOSAHEDRON_RADIUS = 1.68;
+  const ICOSAHEDRON_NODE_RADIUS = 0.022;
+  const ICOSAHEDRON_CAMERA_DISTANCE = 15.8;
+  const ICOSAHEDRON_AUTO_SPIN_SPEED = 0.36;
   const SURFACE_VECTOR_WIDTH = 11;
   const SURFACE_SECTION_SIZE = 9;
   const SURFACE_SIDE_COUNT = 2;
@@ -157,10 +188,12 @@ const pageTitle = "Coming Soon | Eschaton Science";
     [1, 4, 0.67],
   ] as const;
   const INTERNAL_ROTATION_SPEED = 0.44275;
-  const FULLSCREEN_CAMERA_DISTANCE = 15.3;
+  const FULLSCREEN_CAMERA_DISTANCE = 6.4;
+  const JOHNSON_CAMERA_DISTANCE = 8.6;
+  const JOHNSON_SCALE = 1.8;
+  const MIN_CAMERA_DISTANCE = 8;
+  const MAX_CAMERA_DISTANCE = 24;
   const PRIMARY_RATE = 0.3;
-  const PRIMARY_SCALE_A = 1.56;
-  const PRIMARY_SCALE_B = 1.56;
   const PRIMARY_MATRIX = [
     [-0.3655736581436624, 0.6268801991813208, -0.3036313403631366],
     [-0.7221911745265163, -0.41725750862998834, 0.3176637973511847],
@@ -170,26 +203,26 @@ const pageTitle = "Coming Soon | Eschaton Science";
     [-0.44485007084317657, -0.3229440186852541, -0.5603656041898762],
   ];
   const PRIMARY_POINTS: PrimaryPoint[] = [
-    { id: 0, a: [0.5, 0.5, 0.5, -0.5, -0.5, -0.5], b: [0.23, 0.23, 0.23, -0.23, -0.23, -0.23] },
-    { id: 1, a: [0.5, 0.5, -0.5, 0.5, -0.5, -0.5], b: [0.23, 0.23, -0.23, 0.23, -0.23, -0.23] },
-    { id: 2, a: [0.5, 0.5, -0.5, -0.5, 0.5, -0.5], b: [0.23, 0.23, -0.23, -0.23, 0.23, -0.23] },
-    { id: 3, a: [0.5, 0.5, -0.5, -0.5, -0.5, 0.5], b: [0.23, 0.23, -0.23, -0.23, -0.23, 0.23] },
-    { id: 4, a: [0.5, -0.5, 0.5, 0.5, -0.5, -0.5], b: [0.23, -0.23, 0.23, 0.23, -0.23, -0.23] },
-    { id: 5, a: [0.5, -0.5, 0.5, -0.5, 0.5, -0.5], b: [0.23, -0.23, 0.23, -0.23, 0.23, -0.23] },
-    { id: 6, a: [0.5, -0.5, 0.5, -0.5, -0.5, 0.5], b: [0.23, -0.23, 0.23, -0.23, -0.23, 0.23] },
-    { id: 7, a: [0.5, -0.5, -0.5, 0.5, 0.5, -0.5], b: [0.23, -0.23, -0.23, 0.23, 0.23, -0.23] },
-    { id: 8, a: [0.5, -0.5, -0.5, 0.5, -0.5, 0.5], b: [0.23, -0.23, -0.23, 0.23, -0.23, 0.23] },
-    { id: 9, a: [0.5, -0.5, -0.5, -0.5, 0.5, 0.5], b: [0.23, -0.23, -0.23, -0.23, 0.23, 0.23] },
-    { id: 10, a: [-0.5, 0.5, 0.5, 0.5, -0.5, -0.5], b: [-0.23, 0.23, 0.23, 0.23, -0.23, -0.23] },
-    { id: 11, a: [-0.5, 0.5, 0.5, -0.5, 0.5, -0.5], b: [-0.23, 0.23, 0.23, -0.23, 0.23, -0.23] },
-    { id: 12, a: [-0.5, 0.5, 0.5, -0.5, -0.5, 0.5], b: [-0.23, 0.23, 0.23, -0.23, -0.23, 0.23] },
-    { id: 13, a: [-0.5, 0.5, -0.5, 0.5, 0.5, -0.5], b: [-0.23, 0.23, -0.23, 0.23, 0.23, -0.23] },
-    { id: 14, a: [-0.5, 0.5, -0.5, 0.5, -0.5, 0.5], b: [-0.23, 0.23, -0.23, 0.23, -0.23, 0.23] },
-    { id: 15, a: [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5], b: [-0.23, 0.23, -0.23, -0.23, 0.23, 0.23] },
-    { id: 16, a: [-0.5, -0.5, 0.5, 0.5, 0.5, -0.5], b: [-0.23, -0.23, 0.23, 0.23, 0.23, -0.23] },
-    { id: 17, a: [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5], b: [-0.23, -0.23, 0.23, 0.23, -0.23, 0.23] },
-    { id: 18, a: [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5], b: [-0.23, -0.23, 0.23, -0.23, 0.23, 0.23] },
-    { id: 19, a: [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5], b: [-0.23, -0.23, -0.23, 0.23, 0.23, 0.23] },
+    { id: 0, a: [0.5, 0.5, 0.5, -0.5, -0.5, -0.5] },
+    { id: 1, a: [0.5, 0.5, -0.5, 0.5, -0.5, -0.5] },
+    { id: 2, a: [0.5, 0.5, -0.5, -0.5, 0.5, -0.5] },
+    { id: 3, a: [0.5, 0.5, -0.5, -0.5, -0.5, 0.5] },
+    { id: 4, a: [0.5, -0.5, 0.5, 0.5, -0.5, -0.5] },
+    { id: 5, a: [0.5, -0.5, 0.5, -0.5, 0.5, -0.5] },
+    { id: 6, a: [0.5, -0.5, 0.5, -0.5, -0.5, 0.5] },
+    { id: 7, a: [0.5, -0.5, -0.5, 0.5, 0.5, -0.5] },
+    { id: 8, a: [0.5, -0.5, -0.5, 0.5, -0.5, 0.5] },
+    { id: 9, a: [0.5, -0.5, -0.5, -0.5, 0.5, 0.5] },
+    { id: 10, a: [-0.5, 0.5, 0.5, 0.5, -0.5, -0.5] },
+    { id: 11, a: [-0.5, 0.5, 0.5, -0.5, 0.5, -0.5] },
+    { id: 12, a: [-0.5, 0.5, 0.5, -0.5, -0.5, 0.5] },
+    { id: 13, a: [-0.5, 0.5, -0.5, 0.5, 0.5, -0.5] },
+    { id: 14, a: [-0.5, 0.5, -0.5, 0.5, -0.5, 0.5] },
+    { id: 15, a: [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5] },
+    { id: 16, a: [-0.5, -0.5, 0.5, 0.5, 0.5, -0.5] },
+    { id: 17, a: [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5] },
+    { id: 18, a: [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5] },
+    { id: 19, a: [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5] },
   ];
   const PRIMARY_LINKS_A: LinkPair[] = [
     [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 10], [0, 11], [0, 12],
@@ -246,24 +279,23 @@ const pageTitle = "Coming Soon | Eschaton Science";
     [3, 12],
     [12, 0],
   ] as const;
-  const SCENE_KEYS: SceneKey[] = ["s1", "s2", "s3"];
-  const MODE_BY_SCENE: Record<string, SceneKey> = {
-    s1: "s1",
-    s2: "s2",
-    s3: "s3",
-  };
+  const SCENE_KEYS: SceneKey[] = ["s1", "s3", "s6", "ico"];
   const MODE_CONFIG: Record<SceneKey, ModeConfig> = {
     s1: {
-      distance: FULLSCREEN_CAMERA_DISTANCE,
+      distance: JOHNSON_CAMERA_DISTANCE,
       rotation: [-0.48, 0.62, 0.08],
-    },
-    s2: {
-      distance: FULLSCREEN_CAMERA_DISTANCE,
-      rotation: [-0.46, 0.58, 0.12],
     },
     s3: {
       distance: FULLSCREEN_CAMERA_DISTANCE,
       rotation: [-0.5, 0.52, 0.1],
+    },
+    s6: {
+      distance: FULLSCREEN_CAMERA_DISTANCE,
+      rotation: [-0.44, 0.7, 0.06],
+    },
+    ico: {
+      distance: ICOSAHEDRON_CAMERA_DISTANCE,
+      rotation: [0, 0.34, 0],
     },
   };
 
@@ -297,127 +329,6 @@ const pageTitle = "Coming Soon | Eschaton Science";
     linksB: PRIMARY_LINKS_B,
     linksC: PRIMARY_LINKS_C,
   });
-
-  const addUniqueEdge = (
-    edges: [string, string][],
-    seen: Set<string>,
-    left: string,
-    right: string
-  ) => {
-    if (left === right) return;
-    const key = left < right ? `${left}:${right}` : `${right}:${left}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    edges.push([left, right]);
-  };
-
-  const buildFlowScene = () => {
-    const points: FlowPoint[] = [];
-    const coreLinks: [string, string][] = [];
-    const bodyLinks: [string, string][] = [];
-    const contourLinks: [string, string][] = [];
-    const centerLinks: [string, string][] = [];
-    const coreSeen = new Set<string>();
-    const bodySeen = new Set<string>();
-    const contourSeen = new Set<string>();
-    const centerSeen = new Set<string>();
-    const slots = [0, 1, 2, 3, 4, 5];
-    const sides = [-1, 1] as const;
-    const innerId = (slot: number) => `r${slot}`;
-    const middleId = (side: -1 | 1, slot: number) => `m${side < 0 ? 0 : 1}${slot}`;
-    const outerId = (band: number, side: -1 | 1, slot: number) =>
-      `o${band}${side < 0 ? 0 : 1}${slot}`;
-    const middleWeights = [51, 64, 15, 51, 25, 64];
-    const outerGroups = [
-      { band: 0, slots: [0, 3], tone: "a", weight: 6, offset: -0.2 },
-      { band: 1, slots: [1, 5], tone: "b", weight: 18, offset: -0.07 },
-      { band: 2, slots: [1, 5], tone: "a", weight: 6, offset: 0.08 },
-      { band: 3, slots: [4], tone: "a", weight: 17, offset: 0.19 },
-      { band: 4, slots: [0, 2, 4], tone: "a", weight: 24, offset: 0.31 },
-    ] as const;
-    const middleEdges = [
-      [0, 2],
-      [0, 3],
-      [1, 3],
-      [1, 5],
-      [2, 0],
-      [3, 0],
-      [3, 1],
-      [3, 4],
-      [4, 3],
-      [4, 4],
-      [5, 1],
-    ] as const;
-
-    for (const slot of slots) {
-      points.push({
-        id: innerId(slot),
-        band: 0,
-        slot,
-        side: 0,
-        tone: "c",
-        weight: 1,
-        offset: 0,
-      });
-      addUniqueEdge(coreLinks, coreSeen, innerId(slot), innerId((slot + 1) % slots.length));
-    }
-
-    for (const side of sides) {
-      for (const slot of slots) {
-        points.push({
-          id: middleId(side, slot),
-          band: 1,
-          slot,
-          side,
-          tone: slot === 0 || slot === 3 ? "b" : "a",
-          weight: middleWeights[slot],
-          offset: side * 0.08,
-        });
-        addUniqueEdge(bodyLinks, bodySeen, middleId(side, slot), innerId(slot));
-      }
-
-      for (const [from, to] of middleEdges) {
-        const left = middleId(side, from);
-        const right = middleId(side, to);
-        if (from === to) {
-          addUniqueEdge(centerLinks, centerSeen, left, innerId(from));
-        } else {
-          addUniqueEdge(contourLinks, contourSeen, left, right);
-        }
-      }
-    }
-
-    for (const group of outerGroups) {
-      for (const side of sides) {
-        for (const slot of group.slots) {
-          const id = outerId(group.band, side, slot);
-          points.push({
-            id,
-            band: 2,
-            slot,
-            side,
-            tone: group.tone,
-            weight: group.weight,
-            offset: group.offset + side * 0.03,
-          });
-          addUniqueEdge(bodyLinks, bodySeen, id, innerId(slot));
-          addUniqueEdge(contourLinks, contourSeen, id, middleId(side, slot));
-        }
-      }
-    }
-
-    for (const side of sides) {
-      addUniqueEdge(centerLinks, centerSeen, outerId(0, side, 0), outerId(0, side, 3));
-      addUniqueEdge(centerLinks, centerSeen, outerId(1, side, 1), outerId(1, side, 5));
-      addUniqueEdge(centerLinks, centerSeen, outerId(2, side, 1), outerId(2, side, 5));
-      addUniqueEdge(centerLinks, centerSeen, outerId(3, side, 4), outerId(4, side, 4));
-      addUniqueEdge(contourLinks, contourSeen, outerId(4, side, 0), middleId(side, 0));
-      addUniqueEdge(contourLinks, contourSeen, outerId(4, side, 2), middleId(side, 2));
-      addUniqueEdge(contourLinks, contourSeen, outerId(4, side, 4), middleId(side, 4));
-    }
-
-    return { points, coreLinks, bodyLinks, contourLinks, centerLinks };
-  };
 
   const buildSurfaceScene = () => {
     const points: SurfacePoint[] = [];
@@ -465,9 +376,45 @@ const pageTitle = "Coming Soon | Eschaton Science";
     };
   };
 
-  const flowData = buildFlowScene();
+  const buildCrystalScene = () => {
+    const points: CrystalPoint[] = [];
+    const links: [string, string][] = [];
+
+    for (let i = 0; i < 6; i += 1) {
+      for (let j = i + 1; j < 6; j += 1) {
+        const negative = [0, 0, 0, 0, 0, 0];
+        negative[i] = 1;
+        negative[j] = -1;
+        points.push({ id: String(points.length), vector: negative });
+
+        const positive = [0, 0, 0, 0, 0, 0];
+        positive[i] = 1;
+        positive[j] = 1;
+        points.push({ id: String(points.length), vector: positive });
+      }
+    }
+
+    for (let left = 0; left < points.length; left += 1) {
+      for (let right = left + 1; right < points.length; right += 1) {
+        const dot = points[left].vector.reduce(
+          (sum, value, index) => sum + value * points[right].vector[index],
+          0
+        );
+        if (Math.abs(dot) === 1) {
+          links.push([points[left].id, points[right].id]);
+        }
+      }
+    }
+
+    return {
+      points,
+      links,
+    };
+  };
+
   const primaryData = buildPrimaryScene();
   const surfaceData = buildSurfaceScene();
+  const crystalData = buildCrystalScene();
   const scene = new Scene();
   const camera = new PerspectiveCamera(38, 1, 0.1, 100);
   const renderer = new WebGLRenderer({
@@ -490,13 +437,19 @@ const pageTitle = "Coming Soon | Eschaton Science";
       nodeMeshes: new Map(),
       positions: new Map(),
     },
-    s2: {
+    s3: {
       group: new Group(),
       lineLayers: [],
       nodeMeshes: new Map(),
       positions: new Map(),
     },
-    s3: {
+    s6: {
+      group: new Group(),
+      lineLayers: [],
+      nodeMeshes: new Map(),
+      positions: new Map(),
+    },
+    ico: {
       group: new Group(),
       lineLayers: [],
       nodeMeshes: new Map(),
@@ -516,6 +469,17 @@ const pageTitle = "Coming Soon | Eschaton Science";
   const dragAxisY = new Vector3();
   const dragAxisZ = new Vector3();
   const dragStep = new Quaternion();
+  const icosahedronSpinAxis = new Vector3(0, 1, 0);
+  const icosahedronVertexAxis = new Vector3(
+    -1,
+    ICOSAHEDRON_GOLDEN_RATIO,
+    0
+  ).normalize();
+  const icosahedronAxisToVertical = new Quaternion().setFromUnitVectors(
+    icosahedronVertexAxis,
+    icosahedronSpinAxis
+  );
+  const autoSpinStep = new Quaternion();
   let cameraDistance = FULLSCREEN_CAMERA_DISTANCE;
   let previousFrameSeconds = 0;
 
@@ -526,37 +490,16 @@ const pageTitle = "Coming Soon | Eschaton Science";
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-  const flowPositionFor = (point: FlowPoint, theta: number) => {
-    const t = theta * FLOW_RATE;
-    const drift = point.band === 0 ? -0.78 : point.band === 1 ? 1 : -0.88;
-    const angle =
-      (point.slot / 6) * Math.PI * 2 +
-      point.side * (0.16 + point.band * 0.06) +
-      point.offset +
-      t * drift;
-    const radius =
-      FLOW_BAND_RADII[point.band] +
-      Math.log2(point.weight + 1) * 0.006 +
-      Math.sin(t * 0.9 + point.slot + point.band) * 0.025;
-    const z =
-      point.side * (point.band === 0 ? 0 : point.band === 1 ? 0.22 : 0.42) +
-      point.offset * 0.74 +
-      Math.cos(t * 0.78 + point.slot * 0.7) * 0.035;
-
-    return new Vector3(radius * Math.cos(angle), radius * Math.sin(angle), z);
-  };
-
-  const refreshFlow = (theta: number) => {
-    for (const point of flowData.points) {
-      scenes.s2.positions.set(point.id, flowPositionFor(point, theta));
-    }
-  };
-
   const refreshPrimary = (theta: number) => {
     for (const point of primaryData.points) {
-      scenes.s1.positions.set(String(point.id), placeVector(advanceVector(point.a, theta), PRIMARY_SCALE_A));
-      scenes.s1.positions.set(`i${point.id}`, placeVector(advanceVector(point.b, theta), PRIMARY_SCALE_B));
+      scenes.s1.positions.set(String(point.id), placeVector(advanceVector(point.a, theta), JOHNSON_SCALE));
     }
+  };
+
+  const distanceForAspect = (mode: SceneKey, aspect: number) => {
+    const baseDistance = MODE_CONFIG[mode].distance;
+    if (mode !== "s1") return baseDistance;
+    return baseDistance * Math.max(1, 1 / Math.max(aspect, 0.001));
   };
 
   const advanceSurfaceVector = (source: number[], theta: number) => {
@@ -600,6 +543,15 @@ const pageTitle = "Coming Soon | Eschaton Science";
     }
   };
 
+  const refreshCrystal = (theta: number) => {
+    for (const point of crystalData.points) {
+      scenes.s6.positions.set(
+        point.id,
+        placeVector(advanceVector(point.vector, theta), CRYSTAL_SCALE)
+      );
+    }
+  };
+
   const makeLineSegments = (
     state: SceneState,
     edges: [string, string][],
@@ -629,49 +581,6 @@ const pageTitle = "Coming Soon | Eschaton Science";
     return layer;
   };
 
-  makeLineSegments(scenes.s2, flowData.coreLinks, 0.74, FLOW_CORE_COLOR);
-  makeLineSegments(scenes.s2, flowData.bodyLinks, 0.34, FLOW_BODY_LINE_COLOR);
-  makeLineSegments(scenes.s2, flowData.contourLinks, 0.62, FLOW_CONTOUR_COLOR);
-  makeLineSegments(scenes.s2, flowData.centerLinks, 0.68, FLOW_CENTER_COLOR);
-
-  const flowNodeGeometries = [
-    new SphereGeometry(FLOW_NODE_RADII[0], 12, 8),
-    new SphereGeometry(FLOW_NODE_RADII[1], 10, 8),
-    new SphereGeometry(FLOW_NODE_RADII[2], 8, 6),
-  ] as const;
-  const flowNodeColors = {
-    a: FLOW_NODE_COLOR,
-    b: FLOW_CONTOUR_COLOR,
-    c: FLOW_CORE_COLOR,
-  };
-  const flowNodeOpacities = {
-    a: 0.82,
-    b: 0.88,
-    c: 0.94,
-  };
-  for (const nodeData of flowData.points) {
-    const opacity = flowNodeOpacities[nodeData.tone];
-    const node = new Mesh(
-      flowNodeGeometries[nodeData.band],
-      new MeshBasicMaterial({
-        color: flowNodeColors[nodeData.tone],
-        transparent: true,
-        opacity,
-      })
-    );
-    node.userData.baseScale = 0.92 + Math.min(0.28, Math.log2(nodeData.weight + 1) * 0.035);
-    node.userData.baseOpacity = opacity;
-    node.userData.hoverOpacity = Math.min(0.98, opacity + 0.08);
-    scenes.s2.nodeMeshes.set(nodeData.id, node);
-    scenes.s2.group.add(node);
-  }
-
-  makeLineSegments(
-    scenes.s1,
-    primaryData.linksA.map(([left, right]) => [`i${left}`, `i${right}`]),
-    0.34,
-    PRIMARY_INNER_LINE_COLOR
-  );
   makeLineSegments(
     scenes.s1,
     primaryData.linksA.map(([left, right]) => [String(left), String(right)]),
@@ -728,6 +637,70 @@ const pageTitle = "Coming Soon | Eschaton Science";
     scenes.s3.group.add(node);
   }
 
+  makeLineSegments(scenes.s6, crystalData.links, 0.2, CRYSTAL_LINE_COLOR);
+
+  const crystalNodeGeometry = new SphereGeometry(CRYSTAL_NODE_RADIUS, 10, 8);
+  for (const point of crystalData.points) {
+    const node = new Mesh(
+      crystalNodeGeometry,
+      new MeshBasicMaterial({
+        color: CRYSTAL_NODE_COLOR,
+        transparent: true,
+        opacity: 0.82,
+      })
+    );
+    node.userData.baseScale = 1;
+    node.userData.baseOpacity = 0.82;
+    node.userData.hoverOpacity = 0.96;
+    scenes.s6.nodeMeshes.set(point.id, node);
+    scenes.s6.group.add(node);
+  }
+
+  const icosahedronGeometry = new IcosahedronGeometry(ICOSAHEDRON_RADIUS, 0);
+  icosahedronGeometry.applyQuaternion(icosahedronAxisToVertical);
+  const icosahedronEdges = new EdgesGeometry(icosahedronGeometry);
+  const icosahedronWireframe = new LineSegments(
+    icosahedronEdges,
+    new LineBasicMaterial({
+      color: ICOSAHEDRON_LINE_COLOR,
+      opacity: 0.68,
+      transparent: true,
+      depthWrite: false,
+    })
+  );
+  scenes.ico.group.add(icosahedronWireframe);
+
+  const icosahedronVertices: Vector3[] = [];
+  const icosahedronPosition = icosahedronGeometry.getAttribute("position");
+  for (let index = 0; index < icosahedronPosition.count; index += 1) {
+    const vertex = new Vector3().fromBufferAttribute(icosahedronPosition, index);
+    const alreadySeen = icosahedronVertices.some(
+      (candidate) => candidate.distanceToSquared(vertex) < 0.000001
+    );
+    if (!alreadySeen) {
+      icosahedronVertices.push(vertex);
+    }
+  }
+
+  const icosahedronNodeGeometry = new SphereGeometry(ICOSAHEDRON_NODE_RADIUS, 12, 8);
+  for (const [index, position] of icosahedronVertices.entries()) {
+    const id = String(index);
+    const node = new Mesh(
+      icosahedronNodeGeometry,
+      new MeshBasicMaterial({
+        color: ICOSAHEDRON_NODE_COLOR,
+        transparent: true,
+        opacity: 0.86,
+      })
+    );
+    node.userData.baseScale = 1;
+    node.userData.baseOpacity = 0.86;
+    node.userData.hoverOpacity = 0.98;
+    scenes.ico.positions.set(id, position);
+    scenes.ico.nodeMeshes.set(id, node);
+    scenes.ico.group.add(node);
+  }
+
   const updateGeometry = () => {
     const state = scenes[activeMode];
     for (const { edges, positions } of state.lineLayers) {
@@ -760,6 +733,7 @@ const pageTitle = "Coming Soon | Eschaton Science";
     renderer.setSize(nextWidth, nextHeight, false);
     camera.aspect = nextWidth / nextHeight;
     camera.updateProjectionMatrix();
+    cameraDistance = distanceForAspect(activeMode, camera.aspect);
   };
 
   const updateHover = () => {
@@ -809,6 +783,16 @@ const pageTitle = "Coming Soon | Eschaton Science";
     spinVelocity.multiplyScalar(drag);
   };
 
+  const applyIcosahedronAutoSpin = (deltaSeconds: number) => {
+    if (activeMode !== "ico" || dragging || reducedMotion.matches || !deltaSeconds) return;
+
+    autoSpinStep.setFromAxisAngle(
+      icosahedronSpinAxis,
+      ICOSAHEDRON_AUTO_SPIN_SPEED * deltaSeconds
+    );
+    targetQuaternion.multiply(autoSpinStep).normalize();
+  };
+
   const animate = (time = 0) => {
     const seconds = time / 1000;
     const deltaSeconds = previousFrameSeconds
@@ -818,9 +802,10 @@ const pageTitle = "Coming Soon | Eschaton Science";
 
     previousFrameSeconds = seconds;
     applyReleaseInertia(deltaSeconds);
-    if (activeMode === "s2") refreshFlow(theta);
+    applyIcosahedronAutoSpin(deltaSeconds);
     if (activeMode === "s1") refreshPrimary(theta);
     if (activeMode === "s3") refreshSurface(theta);
+    if (activeMode === "s6") refreshCrystal(theta);
     const rotationSettle = deltaSeconds ? 1 - Math.exp(-12 * deltaSeconds) : 1;
     root.quaternion.slerp(targetQuaternion, rotationSettle);
     camera.position.z += (cameraDistance - camera.position.z) * 0.12;
@@ -869,7 +854,10 @@ const pageTitle = "Coming Soon | Eschaton Science";
     "wheel",
     (event) => {
       event.preventDefault();
-      cameraDistance = Math.max(10, Math.min(24, cameraDistance + event.deltaY * 0.006));
+      cameraDistance = Math.max(
+        MIN_CAMERA_DISTANCE,
+        Math.min(MAX_CAMERA_DISTANCE, cameraDistance + event.deltaY * 0.006)
+      );
     },
     { passive: false }
   );
@@ -881,30 +869,16 @@ const pageTitle = "Coming Soon | Eschaton Science";
     for (const sceneKey of SCENE_KEYS) {
       scenes[sceneKey].group.visible = sceneKey === mode;
     }
-    cameraDistance = MODE_CONFIG[mode].distance;
+    cameraDistance = distanceForAspect(mode, camera.aspect);
     targetQuaternion.setFromEuler(new Euler(...MODE_CONFIG[mode].rotation));
     root.quaternion.copy(targetQuaternion);
-    for (const button of modeButtons) {
-      const active = MODE_BY_SCENE[button.dataset.scene ?? ""] === mode;
-      button.classList.toggle("is-active", active);
-      button.setAttribute("aria-pressed", String(active));
-    }
     updateGeometry();
   };
 
-  for (const button of modeButtons) {
-    button.addEventListener("click", () => {
-      const mode = MODE_BY_SCENE[button.dataset.scene ?? ""];
-      if (mode) {
-        setScene(mode);
-      }
-    });
-  }
-
   new ResizeObserver(resize).observe(canvas);
-  refreshFlow(0);
   refreshPrimary(0);
   refreshSurface(0);
+  refreshCrystal(0);
   setScene("s1");
   updateGeometry();
   resize();
@@ -946,20 +920,30 @@ const pageTitle = "Coming Soon | Eschaton Science";
   }
 
   .lockup {
+    --headline-size: clamp(1.62rem, calc(1.02rem + 3.15vw), 5.7rem);
+    --headline-top: clamp(92px, 11svh, 140px);
+    --visual-top: clamp(176px, 22svh, 260px);
+    --visual-height: clamp(330px, 39svh, 460px);
+    --chart-gap: clamp(84px, 8svh, 126px);
+    --chart-top: calc(var(--visual-top) + var(--visual-height) + var(--chart-gap));
     position: fixed;
     inset: 0;
     z-index: 2;
     pointer-events: none;
   }
 
-  h1 {
+  .headline-stack {
     position: fixed;
-    top: clamp(80px, 20svh, 190px);
+    top: var(--headline-top);
     left: 50%;
     z-index: 2;
+    transform: translateX(-50%);
+  }
+
+  h1 {
     margin: 0;
     color: #fff;
-    font-size: clamp(3.25rem, 10vw, 8.5rem);
+    font-size: var(--headline-size);
     font-weight: 200;
     letter-spacing: 0;
     line-height: 0.88;
@@ -967,23 +951,203 @@ const pageTitle = "Coming Soon | Eschaton Science";
     text-shadow:
       0 0 12px rgb(255 255 255 / 0.14),
       0 0 42px rgb(255 255 255 / 0.08);
-    transform: translate(-50%, -20%);
     white-space: nowrap;
   }
 
   @media (min-width: 900px) and (min-height: 720px) {
-    h1 {
-      top: clamp(56px, 12svh, 136px);
+    .lockup {
+      --headline-top: clamp(92px, 10svh, 128px);
     }
+  }
+
+  .benchmark-chart {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: var(--chart-top);
+    left: 50%;
+    z-index: 2;
+    width: min(680px, calc(100vw - 44px));
+    color: #fff;
+    pointer-events: auto;
+    transform: translateX(-50%);
+  }
+
+  .benchmark-copy {
+    order: 1;
+    display: grid;
+    gap: 3px;
+    margin: 0 0 10px;
+    text-align: center;
+    text-shadow:
+      0 0 10px rgb(255 255 255 / 0.12),
+      0 0 30px rgb(255 255 255 / 0.08);
+    transform: translateY(-15%);
+  }
+
+  .benchmark-kicker,
+  .benchmark-copy p {
+    margin: 0;
+    color: rgb(255 255 255 / 0.58);
+    font-size: clamp(0.82rem, calc(0.68rem + 0.42vw), 1rem);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    line-height: 1.25;
+    text-transform: uppercase;
+  }
+
+  .bar-chart {
+    order: 3;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(34px, 1fr));
+    gap: clamp(7px, 1.7vw, 18px);
+    align-items: end;
+    min-height: clamp(116px, 22svh, 162px);
+    overflow: visible;
+    padding: clamp(32px, 4.5svh, 52px) 0 0;
+  }
+
+  .bar-group {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .bars {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(8px, 1fr));
+    gap: clamp(4px, 0.7vw, 8px);
+    align-items: end;
+    height: clamp(78px, 16svh, 118px);
+  }
+
+  .bar {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    height: 100%;
+    min-width: 0;
+    cursor: default;
+    outline: none;
+  }
+
+  .bar::after {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    z-index: 4;
+    padding: 5px 7px;
+    border: 1px solid rgb(255 255 255 / 0.16);
+    background: rgb(0 0 0 / 0.9);
+    color: rgb(255 255 255 / 0.92);
+    content: attr(data-tooltip);
+    font-size: clamp(0.68rem, calc(0.58rem + 0.26vw), 0.78rem);
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 3px);
+    transition:
+      opacity 70ms ease,
+      transform 70ms ease;
+    white-space: nowrap;
+  }
+
+  .bar:hover::after,
+  .bar:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  .bar-fill {
+    display: block;
+    width: 100%;
+    min-height: 5px;
+    border: 1px solid rgb(255 255 255 / 0.22);
+    background: rgb(255 255 255 / 0.32);
+    box-shadow: 0 0 16px rgb(255 255 255 / 0.08);
+    pointer-events: none;
+  }
+
+  .bar-cadical .bar-fill {
+    background: rgb(255 255 255 / 0.18);
+  }
+
+  .bar-kissat .bar-fill {
+    background: rgb(255 255 255 / 0.38);
+  }
+
+  .bar-zeta .bar-fill {
+    background: rgb(255 255 255 / 0.92);
+    box-shadow:
+      0 0 10px rgb(255 255 255 / 0.26),
+      0 0 26px rgb(255 255 255 / 0.14);
+  }
+
+  .case-label {
+    color: rgb(255 255 255 / 0.86);
+    font-size: clamp(0.7rem, calc(0.6rem + 0.3vw), 0.82rem);
+    line-height: 1;
+    text-align: center;
+  }
+
+  .benchmark-legend {
+    order: 2;
+    display: flex;
+    justify-content: center;
+    gap: clamp(12px, 2vw, 20px);
+    margin: 0 0 clamp(26px, 4svh, 44px);
+    color: rgb(255 255 255 / 0.64);
+    font-size: clamp(0.76rem, calc(0.64rem + 0.36vw), 0.9rem);
+    line-height: 1;
+    transform: translateY(-15%);
+  }
+
+  .benchmark-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .benchmark-legend i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border: 1px solid rgb(255 255 255 / 0.22);
+  }
+
+  .legend-cadical {
+    background: rgb(255 255 255 / 0.18);
+  }
+
+  .legend-kissat {
+    background: rgb(255 255 255 / 0.38);
+  }
+
+  .legend-zeta {
+    background: rgb(255 255 255 / 0.92);
+    box-shadow: 0 0 12px rgb(255 255 255 / 0.24);
   }
 
   .visual-shell {
     position: fixed;
-    inset: 0;
+    top: var(--visual-top);
+    left: 50%;
     z-index: 0;
-    width: 100vw;
-    height: 100svh;
+    display: grid;
+    width: min(620px, calc(100vw - 48px));
+    height: var(--visual-height);
     margin: 0;
+    pointer-events: none;
+    transform: translateX(-50%);
+  }
+
+  .visual-frame {
+    width: 100%;
+    height: 100%;
+    contain: layout paint;
+    overflow: hidden;
     pointer-events: auto;
   }
 
@@ -1000,69 +1164,6 @@ const pageTitle = "Coming Soon | Eschaton Science";
     cursor: grabbing;
   }
 
-  .scene-dots {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(16px, 4.8vw, 30px);
-    position: fixed;
-    bottom: clamp(34px, 8svh, 86px);
-    left: 50%;
-    z-index: 3;
-    min-height: 48px;
-    pointer-events: auto;
-    transform: translateX(-50%);
-  }
-
-  .scene-dot {
-    position: relative;
-    display: grid;
-    width: 44px;
-    height: 44px;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    cursor: pointer;
-    opacity: 0.58;
-    touch-action: manipulation;
-    transition:
-      opacity 160ms ease,
-      transform 160ms ease;
-  }
-
-  .scene-dot::before {
-    width: 12px;
-    height: 12px;
-    border: 1.5px solid rgb(255 255 255 / 0.58);
-    border-radius: inherit;
-    background: transparent;
-    content: "";
-    transition:
-      background-color 160ms ease,
-      border-color 160ms ease,
-      transform 160ms ease;
-  }
-
-  .scene-dot.is-active {
-    opacity: 0.9;
-  }
-
-  .scene-dot.is-active::before {
-    border-color: #fff;
-    background: #fff;
-    transform: scale(1.16);
-  }
-
-  .scene-dot:hover {
-    opacity: 1;
-  }
-
-  .scene-dot:hover::before {
-    border-color: #fff;
-  }
-
   .sr-only {
     position: absolute;
     width: 1px;
@@ -1075,32 +1176,90 @@ const pageTitle = "Coming Soon | Eschaton Science";
     border: 0;
   }
 
-  @media (max-width: 620px) {
+  @media (max-width: 620px), (max-aspect-ratio: 3 / 4) {
+    .lockup {
+      --headline-size: min(3.53rem, 4.46svh, calc((100svw - 28px) / 12.7));
+      --headline-top: clamp(58px, 8svh, 88px);
+      --visual-top: clamp(148px, 20svh, 224px);
+      --chart-bottom: clamp(150px, 14svh, 220px);
+      --chart-reserve: 214px;
+      --visual-height: min(
+        clamp(320px, 45svh, 640px),
+        calc(100svh - var(--visual-top) - var(--chart-reserve) - var(--chart-bottom) - var(--chart-gap))
+      );
+      --chart-gap: clamp(30px, 5svh, 58px);
+    }
+
+    .headline-stack {
+      top: var(--headline-top);
+    }
+
     h1 {
-      top: clamp(64px, 19svh, 132px);
-      font-size: clamp(3rem, 18vw, 5.8rem);
       line-height: 0.95;
-      white-space: normal;
+      white-space: nowrap;
     }
 
     .visual-shell {
-      width: 100vw;
-      height: 100svh;
+      top: var(--visual-top);
+      width: min(620px, calc(100vw - 28px));
+      height: var(--visual-height);
     }
 
-    .scene-dots {
-      gap: clamp(18px, 6vw, 32px);
-      min-height: 52px;
+    .visual-frame {
+      height: 100%;
+      min-height: 0;
     }
 
-    .scene-dot {
-      width: 50px;
-      height: 50px;
+    .benchmark-chart {
+      top: auto;
+      bottom: var(--chart-bottom);
+      width: min(620px, calc(100vw - 28px));
     }
 
-    .scene-dot::before {
-      width: 13px;
-      height: 13px;
+    .benchmark-copy {
+      gap: 2px;
+      margin-bottom: 7px;
+      transform: none;
     }
+
+    .benchmark-kicker,
+    .benchmark-copy p {
+      font-size: clamp(0.78rem, 2vw, 0.9rem);
+      letter-spacing: 0.065em;
+      line-height: 1.22;
+    }
+
+    .bar-chart {
+      gap: 6px;
+      min-height: 122px;
+      padding: 46px 0 0;
+    }
+
+    .bar::after {
+      bottom: calc(100% + 16px);
+    }
+
+    .bars {
+      gap: 3px;
+      height: 76px;
+    }
+
+    .case-label {
+      font-size: clamp(0.72rem, 1.9vw, 0.82rem);
+    }
+
+    .benchmark-legend {
+      justify-content: center;
+      gap: 9px;
+      margin: 0 0 18px;
+      font-size: clamp(0.76rem, 2vw, 0.86rem);
+      transform: none;
+    }
+
+    .benchmark-legend i {
+      width: 8px;
+      height: 8px;
+    }
+
   }
 </style>
