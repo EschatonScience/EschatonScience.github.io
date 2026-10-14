@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
-    "build": "astro check && astro build && node scripts/finalize-static.mjs",
+    "build": "astro build && node scripts/finalize-static.mjs",
     "check": "astro check",
-    "preview": "astro preview --host 127.0.0.1"
+    "preview": "astro build && astro preview --host 127.0.0.1"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.9",

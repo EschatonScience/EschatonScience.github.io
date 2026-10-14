@@ -1,20 +1,10 @@
 ---
-const pageTitle = "Coming Soon | Eschaton Science";
-const benchmarkRows = [
-  { cases: 1000, zeta: 1.948, kissat: 2.578, cadical: 3.364, zetaKissat: "1.32x", zetaCadical: "1.73x" },
-  { cases: 2000, zeta: 4.712, kissat: 6.956, cadical: 10.402, zetaKissat: "1.48x", zetaCadical: "2.21x" },
-  { cases: 3000, zeta: 5.632, kissat: 13.479, cadical: 16.333, zetaKissat: "2.39x", zetaCadical: "2.90x" },
-  { cases: 4000, zeta: 7.981, kissat: 18.956, cadical: 23.602, zetaKissat: "2.38x", zetaCadical: "2.96x" },
-  { cases: 5000, zeta: 10.487, kissat: 27.259, cadical: 30.047, zetaKissat: "2.60x", zetaCadical: "2.87x" },
+const rows = [
+  [80, 40, 180, 440, 180, 40],
+  [4, 14, 8, 0, 8, 14],
+  [52, 26, 117, 286, 117, 26],
+  [24, 12, 54, 132, 54, 12],
 ];
-const solverBars = [
-  { key: "cadical", label: "CaDiCaL" },
-  { key: "kissat", label: "Kissat" },
-  { key: "zeta", label: "ζ" },
-] as const;
-const maxBenchmarkSeconds = Math.max(
-  ...benchmarkRows.flatMap((row) => [row.zeta, row.kissat, row.cadical])
-);
 ---
 
 <!doctype html>
@@ -22,1244 +12,202 @@ const maxBenchmarkSeconds = Math.max(
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Eschaton Science is preparing its first public release."
-    />
-    <title>{pageTitle}</title>
+    <title>Eschaton Science</title>
+    <style>
+      @font-face {
+        font-family: "Matrix Serif";
+        src: url("/fonts/KaTeX_Main-Regular.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+      }
+
+      :root {
+        color-scheme: dark;
+        background: #000;
+        color: #fff;
+        font-family: "Matrix Serif", "Cambria Math", serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      main {
+        visibility: hidden;
+        position: relative;
+        width: 100%;
+        height: 100svh;
+        isolation: isolate;
+        overflow: hidden;
+        background: #000;
+      }
+
+      main.scene-ready {
+        visibility: visible;
+      }
+
+      #alignment {
+        position: absolute;
+        inset: 0;
+        display: block;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      .matrix-frame {
+        position: absolute;
+        top: 29%;
+        left: 50%;
+        width: min(34rem, calc(100% - 40px));
+        padding: clamp(10px, 1.2svh, 16px) clamp(12px, 2vw, 24px);
+        transform: translate(-50%, -50%);
+        z-index: 1;
+      }
+
+      .matrix {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+        font-size: clamp(1.125rem, min(3.6vw, 2.7svh), 1.8rem);
+        font-variant-numeric: lining-nums tabular-nums;
+        font-family: "Matrix Serif", "Cambria Math", serif;
+        line-height: 1;
+        color: #f1eade;
+      }
+
+      .matrix td {
+        padding: 0.26em 0;
+        text-align: center;
+      }
+
+      .matrix-number {
+        position: relative;
+        display: inline-block;
+        white-space: nowrap;
+      }
+
+      .matrix-baseline {
+        display: inline-block;
+        width: 0;
+        height: 0;
+      }
+
+      .matrix-number-lit {
+        background-image: var(--contour-light);
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .matrix-number-lit::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background-image: var(--contour-glow);
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        filter: var(--number-bloom);
+        opacity: 0.6;
+      }
+
+      @media (max-height: 520px) {
+        .matrix-frame {
+          top: 31%;
+          width: min(26rem, calc(100% - 40px));
+          padding-block: 4px;
+        }
+
+        .matrix {
+          font-size: clamp(0.75rem, 2.7svh, 1rem);
+        }
+
+        .matrix td {
+          padding-block: 0.28em;
+        }
+      }
+    </style>
   </head>
   <body>
-    <main class="stage" aria-label="Coming Soon">
-      <section class="lockup">
-        <div class="headline-stack">
-          <h1>We know the endgame.</h1>
-        </div>
-
-        <section class="benchmark-chart" aria-label="Zeta benchmark dominance">
-          <div class="benchmark-copy">
-            <p class="benchmark-kicker">SAT benchmark @ 32 variables</p>
-            <p>Runtime in seconds. Lower is better.</p>
-          </div>
-
-          <div class="bar-chart" aria-label="Grouped runtime bar chart">
-            {
-              benchmarkRows.map((row) => (
-                <div class="bar-group">
-                  <div class="bars" aria-label={`${row.cases} cases`}>
-                    {solverBars.map((solver) => {
-                      const seconds = row[solver.key];
-                      const height = `${(seconds / maxBenchmarkSeconds) * 100}%`;
-                      return (
-                        <div
-                          class={`bar bar-${solver.key}`}
-                          data-tooltip={`${solver.label}: ${seconds}s`}
-                          aria-label={`${solver.label}: ${seconds}s`}
-                          tabindex="0"
-                        >
-                          <span class="bar-fill" style={`height: ${height}`} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div class="case-label">{row.cases}</div>
-                </div>
-              ))
-            }
-          </div>
-
-          <div class="benchmark-legend" aria-label="Chart legend">
-            <span><i class="legend-cadical"></i>CaDiCaL</span>
-            <span><i class="legend-kissat"></i>Kissat</span>
-            <span><i class="legend-zeta"></i>ζ</span>
-          </div>
-        </section>
-
-        <figure class="visual-shell">
-          <div class="visual-frame">
-            <canvas id="visual-stage" aria-hidden="true"></canvas>
-          </div>
-          <figcaption class="sr-only">
-            Animated visual scene.
-          </figcaption>
-        </figure>
-
-      </section>
+    <main>
+      <svg width="0" height="0" aria-hidden="true" focusable="false" style="position: absolute;">
+        <defs>
+          <filter id="number-glow-bloom" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+            <feGaussianBlur stdDeviation="1.8" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="4" />
+            </feComponentTransfer>
+          </filter>
+        </defs>
+      </svg>
+      <canvas id="alignment" aria-hidden="true"></canvas>
+      <div class="matrix-frame">
+        <table class="matrix" aria-label="N" style="--number-bloom: url(#number-glow-bloom);">
+          <tbody>
+            {rows.map((row) => (
+              <tr>
+                {row.map((value) => (
+                  <td><span class="matrix-number">{value}<i class="matrix-baseline" aria-hidden="true"></i></span></td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </main>
   </body>
 </html>
 
 <script>
-  import {
-    BufferGeometry,
-    EdgesGeometry,
-    Euler,
-    Float32BufferAttribute,
-    Group,
-    IcosahedronGeometry,
-    LineBasicMaterial,
-    LineSegments,
-    Mesh,
-    MeshBasicMaterial,
-    PerspectiveCamera,
-    Quaternion,
-    Raycaster,
-    Scene,
-    SphereGeometry,
-    Vector2,
-    Vector3,
-    WebGLRenderer,
-  } from "three";
+  import { createAlignment } from "../alignment";
+  import { createNumberLight } from "../number-light";
 
-  type PrimaryPoint = {
-    id: number;
-    a: number[];
-  };
-  type SurfacePoint = {
-    id: string;
-    vector: number[];
-  };
-  type CrystalPoint = {
-    id: string;
-    vector: number[];
-  };
-  type SceneKey = "s1" | "s3" | "s6" | "ico";
-  type LinkPair = [number, number];
-  type LineLayer = {
-    edges: [string, string][];
-    positions: Float32BufferAttribute;
-  };
-  type SceneState = {
-    group: Group;
-    lineLayers: LineLayer[];
-    nodeMeshes: Map<string, Mesh>;
-    positions: Map<string, Vector3>;
-  };
-  type ModeConfig = {
-    distance: number;
-    rotation: [number, number, number];
-  };
+  const page = document.querySelector<HTMLElement>("main")!;
+  const canvas = document.querySelector<HTMLCanvasElement>("#alignment")!;
+  const frame = document.querySelector<HTMLElement>(".matrix-frame")!;
+  const matrix = document.querySelector<HTMLTableElement>(".matrix")!;
+  let disposed = false;
+  let alignment: ReturnType<typeof createAlignment> | undefined;
+  let observer: ResizeObserver | undefined;
 
-  const canvas = document.querySelector<HTMLCanvasElement>("#visual-stage");
-  if (!canvas) {
-    throw new Error("Stage canvas was not found.");
-  }
+  async function startScene() {
+    await document.fonts.load('400 16px "Matrix Serif"');
+    if (disposed) return;
 
-  const WHITE = 0xffffff;
-  const PRIMARY_NODE_COLOR = 0xffffff;
-  const PRIMARY_MAIN_LINE_COLOR = 0xffffff;
-  const PRIMARY_QUIET_LINE_COLOR = 0xffffff;
-  const PRIMARY_ACCENT_LINE_COLOR = WHITE;
-  const SURFACE_NODE_COLOR = WHITE;
-  const SURFACE_BODY_LINE_COLOR = WHITE;
-  const SURFACE_BRIDGE_LINE_COLOR = WHITE;
-  const CRYSTAL_NODE_COLOR = WHITE;
-  const CRYSTAL_LINE_COLOR = WHITE;
-  const ICOSAHEDRON_NODE_COLOR = WHITE;
-  const ICOSAHEDRON_LINE_COLOR = WHITE;
-  const SURFACE_NODE_RADIUS = 0.017;
-  const CRYSTAL_NODE_RADIUS = 0.016;
-  const CRYSTAL_SCALE = 1.2674;
-  const ICOSAHEDRON_GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
-  const ICOSAHEDRON_RADIUS = 1.68;
-  const ICOSAHEDRON_NODE_RADIUS = 0.022;
-  const ICOSAHEDRON_CAMERA_DISTANCE = 15.8;
-  const ICOSAHEDRON_AUTO_SPIN_SPEED = 0.36;
-  const SURFACE_VECTOR_WIDTH = 11;
-  const SURFACE_SECTION_SIZE = 9;
-  const SURFACE_SIDE_COUNT = 2;
-  const SURFACE_TARGET_RADIUS = 1.78;
-  const SURFACE_RATE = 0.72;
-  const SURFACE_PROJECTION = Array.from({ length: SURFACE_VECTOR_WIDTH }, (_, index) => {
-    const angle = (index / SURFACE_VECTOR_WIDTH) * Math.PI * 2;
-    return [
-      Math.cos(angle) * 0.62 + Math.cos(angle * 3) * 0.22,
-      Math.sin(angle) * 0.62 - Math.sin(angle * 4) * 0.16,
-      Math.cos(angle * 2 + Math.PI / 5) * 0.54,
-    ] as const;
-  });
-  const SURFACE_MOTION = [
-    [0, 9, 0.72],
-    [1, 10, 1.06],
-    [2, 5, 0.88],
-    [3, 7, 1.32],
-    [4, 8, 0.54],
-    [6, 10, 1.58],
-    [0, 3, 0.43],
-    [1, 4, 0.67],
-  ] as const;
-  const INTERNAL_ROTATION_SPEED = 0.44275;
-  const FULLSCREEN_CAMERA_DISTANCE = 6.4;
-  const JOHNSON_CAMERA_DISTANCE = 8.6;
-  const JOHNSON_SCALE = 1.8;
-  const MIN_CAMERA_DISTANCE = 8;
-  const MAX_CAMERA_DISTANCE = 24;
-  const PRIMARY_RATE = 0.3;
-  const PRIMARY_MATRIX = [
-    [-0.3655736581436624, 0.6268801991813208, -0.3036313403631366],
-    [-0.7221911745265163, -0.41725750862998834, 0.3176637973511847],
-    [0.32831198671803014, -0.5117580331118852, -0.3370453139128483],
-    [-0.058288794101768106, -0.015706214620807003, 0.6104672014040253],
-    [-0.18899174118916912, 0.2578402189912208, -0.08135332213223956],
-    [-0.44485007084317657, -0.3229440186852541, -0.5603656041898762],
-  ];
-  const PRIMARY_POINTS: PrimaryPoint[] = [
-    { id: 0, a: [0.5, 0.5, 0.5, -0.5, -0.5, -0.5] },
-    { id: 1, a: [0.5, 0.5, -0.5, 0.5, -0.5, -0.5] },
-    { id: 2, a: [0.5, 0.5, -0.5, -0.5, 0.5, -0.5] },
-    { id: 3, a: [0.5, 0.5, -0.5, -0.5, -0.5, 0.5] },
-    { id: 4, a: [0.5, -0.5, 0.5, 0.5, -0.5, -0.5] },
-    { id: 5, a: [0.5, -0.5, 0.5, -0.5, 0.5, -0.5] },
-    { id: 6, a: [0.5, -0.5, 0.5, -0.5, -0.5, 0.5] },
-    { id: 7, a: [0.5, -0.5, -0.5, 0.5, 0.5, -0.5] },
-    { id: 8, a: [0.5, -0.5, -0.5, 0.5, -0.5, 0.5] },
-    { id: 9, a: [0.5, -0.5, -0.5, -0.5, 0.5, 0.5] },
-    { id: 10, a: [-0.5, 0.5, 0.5, 0.5, -0.5, -0.5] },
-    { id: 11, a: [-0.5, 0.5, 0.5, -0.5, 0.5, -0.5] },
-    { id: 12, a: [-0.5, 0.5, 0.5, -0.5, -0.5, 0.5] },
-    { id: 13, a: [-0.5, 0.5, -0.5, 0.5, 0.5, -0.5] },
-    { id: 14, a: [-0.5, 0.5, -0.5, 0.5, -0.5, 0.5] },
-    { id: 15, a: [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5] },
-    { id: 16, a: [-0.5, -0.5, 0.5, 0.5, 0.5, -0.5] },
-    { id: 17, a: [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5] },
-    { id: 18, a: [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5] },
-    { id: 19, a: [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5] },
-  ];
-  const PRIMARY_LINKS_A: LinkPair[] = [
-    [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 10], [0, 11], [0, 12],
-    [1, 2], [1, 3], [1, 4], [1, 7], [1, 8], [1, 10], [1, 13], [1, 14],
-    [2, 3], [2, 5], [2, 7], [2, 9], [2, 11], [2, 13], [2, 15],
-    [3, 6], [3, 8], [3, 9], [3, 12], [3, 14], [3, 15],
-    [4, 5], [4, 6], [4, 7], [4, 8], [4, 10], [4, 16], [4, 17],
-    [5, 6], [5, 7], [5, 9], [5, 11], [5, 16], [5, 18],
-    [6, 8], [6, 9], [6, 12], [6, 17], [6, 18],
-    [7, 8], [7, 9], [7, 13], [7, 16], [7, 19],
-    [8, 9], [8, 14], [8, 17], [8, 19],
-    [9, 15], [9, 18], [9, 19],
-    [10, 11], [10, 12], [10, 13], [10, 14], [10, 16], [10, 17],
-    [11, 12], [11, 13], [11, 15], [11, 16], [11, 18],
-    [12, 14], [12, 15], [12, 17], [12, 18],
-    [13, 14], [13, 15], [13, 16], [13, 19],
-    [14, 15], [14, 17], [14, 19],
-    [15, 18], [15, 19],
-    [16, 17], [16, 18], [16, 19],
-    [17, 18], [17, 19],
-    [18, 19],
-  ];
-  const PRIMARY_LINKS_C: LinkPair[] = [
-    [0, 19], [1, 18], [2, 17], [3, 16], [4, 15],
-    [5, 14], [6, 13], [7, 12], [8, 11], [9, 10],
-  ];
-  const PRIMARY_MOTION = [
-    [0, 1, 1],
-    [2, 3, 2],
-    [4, 5, 3],
-    [0, 3, 4],
-    [1, 4, 5],
-    [2, 5, 6],
-  ];
-  const PRIMARY_LINKS_B: LinkPair[] = [
-    [0, 1],
-    [1, 2],
-    [2, 5],
-    [5, 11],
-    [11, 15],
-    [15, 13],
-    [13, 10],
-    [10, 16],
-    [16, 7],
-    [7, 19],
-    [19, 18],
-    [18, 17],
-    [17, 14],
-    [14, 8],
-    [8, 4],
-    [4, 6],
-    [6, 9],
-    [9, 3],
-    [3, 12],
-    [12, 0],
-  ] as const;
-  const SCENE_KEYS: SceneKey[] = ["s1", "s3", "s6", "ico"];
-  const MODE_CONFIG: Record<SceneKey, ModeConfig> = {
-    s1: {
-      distance: JOHNSON_CAMERA_DISTANCE,
-      rotation: [-0.48, 0.62, 0.08],
-    },
-    s3: {
-      distance: FULLSCREEN_CAMERA_DISTANCE,
-      rotation: [-0.5, 0.52, 0.1],
-    },
-    s6: {
-      distance: FULLSCREEN_CAMERA_DISTANCE,
-      rotation: [-0.44, 0.7, 0.06],
-    },
-    ico: {
-      distance: ICOSAHEDRON_CAMERA_DISTANCE,
-      rotation: [0, 0.34, 0],
-    },
-  };
-
-  const advanceVector = (source: number[], theta: number) => {
-    const vector = source.slice();
-    for (const [i, j, speed] of PRIMARY_MOTION) {
-      const angle = speed * PRIMARY_RATE * theta;
-      const c = Math.cos(angle);
-      const s = Math.sin(angle);
-      const vi = vector[i];
-      const vj = vector[j];
-      vector[i] = c * vi - s * vj;
-      vector[j] = s * vi + c * vj;
-    }
-    return vector;
-  };
-
-  const placeVector = (point: number[], scale = 2.15) => {
-    const placed = new Vector3();
-    for (let i = 0; i < PRIMARY_MATRIX.length; i += 1) {
-      placed.x += point[i] * PRIMARY_MATRIX[i][0];
-      placed.y += point[i] * PRIMARY_MATRIX[i][1];
-      placed.z += point[i] * PRIMARY_MATRIX[i][2];
-    }
-    return placed.multiplyScalar(scale);
-  };
-
-  const buildPrimaryScene = () => ({
-    points: PRIMARY_POINTS,
-    linksA: PRIMARY_LINKS_A,
-    linksB: PRIMARY_LINKS_B,
-    linksC: PRIMARY_LINKS_C,
-  });
-
-  const buildSurfaceScene = () => {
-    const points: SurfacePoint[] = [];
-    const bodyLinks: [string, string][] = [];
-    const bridgeLinks: [string, string][] = [];
-
-    for (let slot = 0; slot < SURFACE_SECTION_SIZE; slot += 1) {
-      for (let side = 0; side < SURFACE_SIDE_COUNT; side += 1) {
-        const vector = Array.from({ length: SURFACE_VECTOR_WIDTH }, (_, index) =>
-          index < SURFACE_SECTION_SIZE
-            ? -1 / SURFACE_SECTION_SIZE
-            : -1 / SURFACE_SIDE_COUNT
-        );
-        vector[slot] = 1 - 1 / SURFACE_SECTION_SIZE;
-        vector[SURFACE_SECTION_SIZE + side] = 1 - 1 / SURFACE_SIDE_COUNT;
-        points.push({
-          id: String(slot * SURFACE_SIDE_COUNT + side),
-          vector,
-        });
-      }
-    }
-
-    for (let side = 0; side < SURFACE_SIDE_COUNT; side += 1) {
-      for (let left = 0; left < SURFACE_SECTION_SIZE; left += 1) {
-        for (let right = left + 1; right < SURFACE_SECTION_SIZE; right += 1) {
-          bodyLinks.push([
-            String(left * SURFACE_SIDE_COUNT + side),
-            String(right * SURFACE_SIDE_COUNT + side),
-          ]);
-        }
-      }
-    }
-
-    for (let slot = 0; slot < SURFACE_SECTION_SIZE; slot += 1) {
-      bridgeLinks.push([
-        String(slot * SURFACE_SIDE_COUNT),
-        String(slot * SURFACE_SIDE_COUNT + 1),
-      ]);
-    }
-
-    return {
-      points,
-      bodyLinks,
-      bridgeLinks,
+    alignment = createAlignment(canvas, frame);
+    const lightNumbers = createNumberLight(matrix);
+    const render = () => {
+      if (disposed) return;
+      lightNumbers();
+      alignment!.render();
+      page.classList.add("scene-ready");
     };
-  };
 
-  const buildCrystalScene = () => {
-    const points: CrystalPoint[] = [];
-    const links: [string, string][] = [];
+    render();
+    observer = new ResizeObserver(render);
+    observer.observe(page);
+    observer.observe(matrix);
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) render();
+    });
+  }
 
-    for (let i = 0; i < 6; i += 1) {
-      for (let j = i + 1; j < 6; j += 1) {
-        const negative = [0, 0, 0, 0, 0, 0];
-        negative[i] = 1;
-        negative[j] = -1;
-        points.push({ id: String(points.length), vector: negative });
-
-        const positive = [0, 0, 0, 0, 0, 0];
-        positive[i] = 1;
-        positive[j] = 1;
-        points.push({ id: String(points.length), vector: positive });
-      }
-    }
-
-    for (let left = 0; left < points.length; left += 1) {
-      for (let right = left + 1; right < points.length; right += 1) {
-        const dot = points[left].vector.reduce(
-          (sum, value, index) => sum + value * points[right].vector[index],
-          0
-        );
-        if (Math.abs(dot) === 1) {
-          links.push([points[left].id, points[right].id]);
-        }
-      }
-    }
-
-    return {
-      points,
-      links,
-    };
-  };
-
-  const primaryData = buildPrimaryScene();
-  const surfaceData = buildSurfaceScene();
-  const crystalData = buildCrystalScene();
-  const scene = new Scene();
-  const camera = new PerspectiveCamera(38, 1, 0.1, 100);
-  const renderer = new WebGLRenderer({
-    alpha: true,
-    antialias: true,
-    canvas,
-    powerPreference: "high-performance",
+  void startScene();
+  window.addEventListener("pagehide", (event) => {
+    if (event.persisted) return;
+    disposed = true;
+    observer?.disconnect();
+    alignment?.dispose();
   });
-  const root = new Group();
-  const raycaster = new Raycaster();
-  const pointer = new Vector2(10, 10);
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const DRAG_ROTATION_SCALE = 0.007;
-  const INERTIA_DAMPING = 3.4;
-  const MIN_INERTIA_SPEED = 0.002;
-  const scenes: Record<SceneKey, SceneState> = {
-    s1: {
-      group: new Group(),
-      lineLayers: [],
-      nodeMeshes: new Map(),
-      positions: new Map(),
-    },
-    s3: {
-      group: new Group(),
-      lineLayers: [],
-      nodeMeshes: new Map(),
-      positions: new Map(),
-    },
-    s6: {
-      group: new Group(),
-      lineLayers: [],
-      nodeMeshes: new Map(),
-      positions: new Map(),
-    },
-    ico: {
-      group: new Group(),
-      lineLayers: [],
-      nodeMeshes: new Map(),
-      positions: new Map(),
-    },
-  };
-
-  let activeMode: SceneKey = "s1";
-  let hoverNode: Mesh | null = null;
-  let dragging = false;
-  let previousPointer = { x: 0, y: 0, time: 0 };
-  const spinVelocity = new Vector3();
-  const targetQuaternion = new Quaternion().setFromEuler(
-    new Euler(...MODE_CONFIG.s1.rotation)
-  );
-  const dragAxisX = new Vector3();
-  const dragAxisY = new Vector3();
-  const dragAxisZ = new Vector3();
-  const dragStep = new Quaternion();
-  const icosahedronSpinAxis = new Vector3(0, 1, 0);
-  const icosahedronVertexAxis = new Vector3(
-    -1,
-    ICOSAHEDRON_GOLDEN_RATIO,
-    0
-  ).normalize();
-  const icosahedronAxisToVertical = new Quaternion().setFromUnitVectors(
-    icosahedronVertexAxis,
-    icosahedronSpinAxis
-  );
-  const autoSpinStep = new Quaternion();
-  let cameraDistance = FULLSCREEN_CAMERA_DISTANCE;
-  let previousFrameSeconds = 0;
-
-  scene.add(root);
-  for (const mode of SCENE_KEYS) root.add(scenes[mode].group);
-  root.quaternion.copy(targetQuaternion);
-  camera.position.set(0, 0, cameraDistance);
-  renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
-  const refreshPrimary = (theta: number) => {
-    for (const point of primaryData.points) {
-      scenes.s1.positions.set(String(point.id), placeVector(advanceVector(point.a, theta), JOHNSON_SCALE));
-    }
-  };
-
-  const distanceForAspect = (mode: SceneKey, aspect: number) => {
-    const baseDistance = MODE_CONFIG[mode].distance;
-    if (mode !== "s1") return baseDistance;
-    return baseDistance * Math.max(1, 1 / Math.max(aspect, 0.001));
-  };
-
-  const advanceSurfaceVector = (source: number[], theta: number) => {
-    const t = theta * SURFACE_RATE;
-    const vector = source.slice();
-    for (const [i, j, speed] of SURFACE_MOTION) {
-      const angle = speed * t;
-      const c = Math.cos(angle);
-      const s = Math.sin(angle);
-      const vi = vector[i];
-      const vj = vector[j];
-      vector[i] = c * vi - s * vj;
-      vector[j] = s * vi + c * vj;
-    }
-    return vector;
-  };
-
-  const surfacePositionFor = (point: SurfacePoint, theta: number) => {
-    const source = advanceSurfaceVector(point.vector, theta);
-    const placed = new Vector3();
-
-    for (let i = 0; i < SURFACE_VECTOR_WIDTH; i += 1) {
-      placed.x += source[i] * SURFACE_PROJECTION[i][0];
-      placed.y += source[i] * SURFACE_PROJECTION[i][1];
-      placed.z += source[i] * SURFACE_PROJECTION[i][2];
-    }
-
-    return placed;
-  };
-
-  const refreshSurface = (theta: number) => {
-    const placed = surfaceData.points.map((point) => ({
-      id: point.id,
-      position: surfacePositionFor(point, theta),
-    }));
-    const maxRadius = Math.max(...placed.map(({ position }) => position.length()), 1);
-    const scale = SURFACE_TARGET_RADIUS / maxRadius;
-
-    for (const { id, position } of placed) {
-      scenes.s3.positions.set(id, position.multiplyScalar(scale));
-    }
-  };
-
-  const refreshCrystal = (theta: number) => {
-    for (const point of crystalData.points) {
-      scenes.s6.positions.set(
-        point.id,
-        placeVector(advanceVector(point.vector, theta), CRYSTAL_SCALE)
-      );
-    }
-  };
-
-  const makeLineSegments = (
-    state: SceneState,
-    edges: [string, string][],
-    opacity: number,
-    color = WHITE
-  ) => {
-    const geometry = new BufferGeometry();
-    const vertices = new Float32Array(edges.length * 2 * 3);
-    geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
-
-    const lines = new LineSegments(
-      geometry,
-      new LineBasicMaterial({
-        color,
-        opacity,
-        transparent: true,
-        depthWrite: false,
-      })
-    );
-    state.group.add(lines);
-
-    const layer = {
-      edges,
-      positions: geometry.getAttribute("position") as Float32BufferAttribute,
-    };
-    state.lineLayers.push(layer);
-    return layer;
-  };
-
-  makeLineSegments(
-    scenes.s1,
-    primaryData.linksA.map(([left, right]) => [String(left), String(right)]),
-    0.28,
-    PRIMARY_MAIN_LINE_COLOR
-  );
-  makeLineSegments(
-    scenes.s1,
-    primaryData.linksB.map(([left, right]) => [String(left), String(right)]),
-    0.56,
-    PRIMARY_ACCENT_LINE_COLOR
-  );
-  makeLineSegments(
-    scenes.s1,
-    primaryData.linksC.map(([left, right]) => [String(left), String(right)]),
-    0.18,
-    PRIMARY_QUIET_LINE_COLOR
-  );
-
-  const nodeGeometry = new SphereGeometry(0.018, 12, 8);
-  for (const point of primaryData.points) {
-    const node = new Mesh(
-      nodeGeometry,
-      new MeshBasicMaterial({
-        color: PRIMARY_NODE_COLOR,
-        transparent: true,
-        opacity: 0.82,
-      })
-    );
-    node.userData.baseScale = 1;
-    node.userData.baseOpacity = 0.82;
-    node.userData.hoverOpacity = 0.96;
-    scenes.s1.nodeMeshes.set(String(point.id), node);
-    scenes.s1.group.add(node);
-  }
-
-  makeLineSegments(scenes.s3, surfaceData.bodyLinks, 0.36, SURFACE_BODY_LINE_COLOR);
-  makeLineSegments(scenes.s3, surfaceData.bridgeLinks, 0.72, SURFACE_BRIDGE_LINE_COLOR);
-
-  const surfaceNodeGeometry = new SphereGeometry(SURFACE_NODE_RADIUS, 10, 8);
-  for (const point of surfaceData.points) {
-    const node = new Mesh(
-      surfaceNodeGeometry,
-      new MeshBasicMaterial({
-        color: SURFACE_NODE_COLOR,
-        transparent: true,
-        opacity: 0.84,
-      })
-    );
-    node.userData.baseScale = 1;
-    node.userData.baseOpacity = 0.84;
-    node.userData.hoverOpacity = 0.96;
-    scenes.s3.nodeMeshes.set(point.id, node);
-    scenes.s3.group.add(node);
-  }
-
-  makeLineSegments(scenes.s6, crystalData.links, 0.2, CRYSTAL_LINE_COLOR);
-
-  const crystalNodeGeometry = new SphereGeometry(CRYSTAL_NODE_RADIUS, 10, 8);
-  for (const point of crystalData.points) {
-    const node = new Mesh(
-      crystalNodeGeometry,
-      new MeshBasicMaterial({
-        color: CRYSTAL_NODE_COLOR,
-        transparent: true,
-        opacity: 0.82,
-      })
-    );
-    node.userData.baseScale = 1;
-    node.userData.baseOpacity = 0.82;
-    node.userData.hoverOpacity = 0.96;
-    scenes.s6.nodeMeshes.set(point.id, node);
-    scenes.s6.group.add(node);
-  }
-
-  const icosahedronGeometry = new IcosahedronGeometry(ICOSAHEDRON_RADIUS, 0);
-  icosahedronGeometry.applyQuaternion(icosahedronAxisToVertical);
-  const icosahedronEdges = new EdgesGeometry(icosahedronGeometry);
-  const icosahedronWireframe = new LineSegments(
-    icosahedronEdges,
-    new LineBasicMaterial({
-      color: ICOSAHEDRON_LINE_COLOR,
-      opacity: 0.68,
-      transparent: true,
-      depthWrite: false,
-    })
-  );
-  scenes.ico.group.add(icosahedronWireframe);
-
-  const icosahedronVertices: Vector3[] = [];
-  const icosahedronPosition = icosahedronGeometry.getAttribute("position");
-  for (let index = 0; index < icosahedronPosition.count; index += 1) {
-    const vertex = new Vector3().fromBufferAttribute(icosahedronPosition, index);
-    const alreadySeen = icosahedronVertices.some(
-      (candidate) => candidate.distanceToSquared(vertex) < 0.000001
-    );
-    if (!alreadySeen) {
-      icosahedronVertices.push(vertex);
-    }
-  }
-
-  const icosahedronNodeGeometry = new SphereGeometry(ICOSAHEDRON_NODE_RADIUS, 12, 8);
-  for (const [index, position] of icosahedronVertices.entries()) {
-    const id = String(index);
-    const node = new Mesh(
-      icosahedronNodeGeometry,
-      new MeshBasicMaterial({
-        color: ICOSAHEDRON_NODE_COLOR,
-        transparent: true,
-        opacity: 0.86,
-      })
-    );
-    node.userData.baseScale = 1;
-    node.userData.baseOpacity = 0.86;
-    node.userData.hoverOpacity = 0.98;
-    scenes.ico.positions.set(id, position);
-    scenes.ico.nodeMeshes.set(id, node);
-    scenes.ico.group.add(node);
-  }
-
-  const updateGeometry = () => {
-    const state = scenes[activeMode];
-    for (const { edges, positions } of state.lineLayers) {
-      let cursor = 0;
-      for (const [left, right] of edges) {
-        const a = state.positions.get(left) ?? new Vector3();
-        const b = state.positions.get(right) ?? new Vector3();
-        positions.setXYZ(cursor, a.x, a.y, a.z);
-        positions.setXYZ(cursor + 1, b.x, b.y, b.z);
-        cursor += 2;
-      }
-      positions.needsUpdate = true;
-    }
-
-    for (const [id, node] of state.nodeMeshes) {
-      node.position.copy(state.positions.get(id) ?? new Vector3());
-      const hovered = hoverNode === node;
-      const baseScale = Number(node.userData.baseScale ?? 1);
-      const baseOpacity = Number(node.userData.baseOpacity ?? 0.72);
-      const hoverOpacity = Number(node.userData.hoverOpacity ?? 0.9);
-      node.scale.setScalar(baseScale * (hovered ? 1.25 : 1));
-      (node.material as MeshBasicMaterial).opacity = hovered ? hoverOpacity : baseOpacity;
-    }
-  };
-
-  const resize = () => {
-    const { width, height } = canvas.getBoundingClientRect();
-    const nextWidth = Math.max(1, Math.floor(width));
-    const nextHeight = Math.max(1, Math.floor(height));
-    renderer.setSize(nextWidth, nextHeight, false);
-    camera.aspect = nextWidth / nextHeight;
-    camera.updateProjectionMatrix();
-    cameraDistance = distanceForAspect(activeMode, camera.aspect);
-  };
-
-  const updateHover = () => {
-    raycaster.setFromCamera(pointer, camera);
-    const hit = raycaster.intersectObjects([...scenes[activeMode].nodeMeshes.values()], false)[0];
-    hoverNode = hit?.object instanceof Mesh ? hit.object : null;
-  };
-
-  const applyFreeRotation = (pitchDelta: number, yawDelta: number, rollDelta = 0) => {
-    if (!pitchDelta && !yawDelta && !rollDelta) return;
-
-    if (pitchDelta) {
-      dragAxisX.set(1, 0, 0).applyQuaternion(targetQuaternion).normalize();
-      dragStep.setFromAxisAngle(dragAxisX, pitchDelta);
-      targetQuaternion.premultiply(dragStep);
-    }
-    if (yawDelta) {
-      dragAxisY.set(0, 1, 0).applyQuaternion(targetQuaternion).normalize();
-      dragStep.setFromAxisAngle(dragAxisY, yawDelta);
-      targetQuaternion.premultiply(dragStep);
-    }
-    if (rollDelta) {
-      dragAxisZ.set(0, 0, 1).applyQuaternion(targetQuaternion).normalize();
-      dragStep.setFromAxisAngle(dragAxisZ, rollDelta);
-      targetQuaternion.premultiply(dragStep);
-    }
-
-    targetQuaternion.normalize();
-  };
-
-  const applyReleaseInertia = (deltaSeconds: number) => {
-    if (dragging || reducedMotion.matches) return;
-
-    const speed = spinVelocity.length();
-    if (speed < MIN_INERTIA_SPEED) {
-      spinVelocity.set(0, 0, 0);
-      return;
-    }
-
-    applyFreeRotation(
-      spinVelocity.x * deltaSeconds,
-      spinVelocity.y * deltaSeconds,
-      spinVelocity.z * deltaSeconds
-    );
-
-    const drag = Math.exp(-INERTIA_DAMPING * deltaSeconds);
-    spinVelocity.multiplyScalar(drag);
-  };
-
-  const applyIcosahedronAutoSpin = (deltaSeconds: number) => {
-    if (activeMode !== "ico" || dragging || reducedMotion.matches || !deltaSeconds) return;
-
-    autoSpinStep.setFromAxisAngle(
-      icosahedronSpinAxis,
-      ICOSAHEDRON_AUTO_SPIN_SPEED * deltaSeconds
-    );
-    targetQuaternion.multiply(autoSpinStep).normalize();
-  };
-
-  const animate = (time = 0) => {
-    const seconds = time / 1000;
-    const deltaSeconds = previousFrameSeconds
-      ? Math.min(0.05, seconds - previousFrameSeconds)
-      : 0;
-    const theta = reducedMotion.matches ? 0 : seconds * INTERNAL_ROTATION_SPEED;
-
-    previousFrameSeconds = seconds;
-    applyReleaseInertia(deltaSeconds);
-    applyIcosahedronAutoSpin(deltaSeconds);
-    if (activeMode === "s1") refreshPrimary(theta);
-    if (activeMode === "s3") refreshSurface(theta);
-    if (activeMode === "s6") refreshCrystal(theta);
-    const rotationSettle = deltaSeconds ? 1 - Math.exp(-12 * deltaSeconds) : 1;
-    root.quaternion.slerp(targetQuaternion, rotationSettle);
-    camera.position.z += (cameraDistance - camera.position.z) * 0.12;
-    updateHover();
-    updateGeometry();
-    renderer.render(scene, camera);
-    requestAnimationFrame(animate);
-  };
-
-  const onPointerMove = (event: PointerEvent) => {
-    const rect = canvas.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
-
-    if (!dragging) return;
-    const dx = event.clientX - previousPointer.x;
-    const dy = event.clientY - previousPointer.y;
-    const deltaSeconds = Math.max(0.016, (event.timeStamp - previousPointer.time) / 1000);
-    previousPointer = { x: event.clientX, y: event.clientY, time: event.timeStamp };
-    const pitchDelta = dy * DRAG_ROTATION_SCALE;
-    const yawDelta = dx * DRAG_ROTATION_SCALE;
-    applyFreeRotation(pitchDelta, yawDelta);
-    spinVelocity.set(pitchDelta / deltaSeconds, yawDelta / deltaSeconds, 0);
-  };
-
-  canvas.addEventListener("pointerdown", (event) => {
-    dragging = true;
-    spinVelocity.set(0, 0, 0);
-    previousPointer = { x: event.clientX, y: event.clientY, time: event.timeStamp };
-    canvas.setPointerCapture(event.pointerId);
-  });
-
-  canvas.addEventListener("pointermove", onPointerMove);
-
-  canvas.addEventListener("pointerup", (event) => {
-    dragging = false;
-    canvas.releasePointerCapture(event.pointerId);
-  });
-
-  canvas.addEventListener("pointerleave", () => {
-    dragging = false;
-    pointer.set(10, 10);
-  });
-
-  canvas.addEventListener(
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      cameraDistance = Math.max(
-        MIN_CAMERA_DISTANCE,
-        Math.min(MAX_CAMERA_DISTANCE, cameraDistance + event.deltaY * 0.006)
-      );
-    },
-    { passive: false }
-  );
-
-  const setScene = (mode: SceneKey) => {
-    activeMode = mode;
-    hoverNode = null;
-    spinVelocity.set(0, 0, 0);
-    for (const sceneKey of SCENE_KEYS) {
-      scenes[sceneKey].group.visible = sceneKey === mode;
-    }
-    cameraDistance = distanceForAspect(mode, camera.aspect);
-    targetQuaternion.setFromEuler(new Euler(...MODE_CONFIG[mode].rotation));
-    root.quaternion.copy(targetQuaternion);
-    updateGeometry();
-  };
-
-  new ResizeObserver(resize).observe(canvas);
-  refreshPrimary(0);
-  refreshSurface(0);
-  refreshCrystal(0);
-  setScene("s1");
-  updateGeometry();
-  resize();
-
-  requestAnimationFrame(animate);
 </script>
-
-<style is:global>
-  :root {
-    color-scheme: dark;
-    background: #000;
-    font-family:
-      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-      sans-serif;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  html,
-  body {
-    min-height: 100%;
-    margin: 0;
-    background: #000;
-  }
-
-  body {
-    overflow: hidden;
-  }
-
-  .stage {
-    min-height: 100svh;
-    position: relative;
-    overflow: hidden;
-    padding: 0;
-    background: #000;
-    color: #fff;
-  }
-
-  .lockup {
-    --headline-size: clamp(1.62rem, calc(1.02rem + 3.15vw), 5.7rem);
-    --headline-top: clamp(92px, 11svh, 140px);
-    --visual-top: clamp(176px, 22svh, 260px);
-    --visual-height: clamp(330px, 39svh, 460px);
-    --chart-gap: clamp(84px, 8svh, 126px);
-    --chart-top: calc(var(--visual-top) + var(--visual-height) + var(--chart-gap));
-    position: fixed;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  .headline-stack {
-    position: fixed;
-    top: var(--headline-top);
-    left: 50%;
-    z-index: 2;
-    transform: translateX(-50%);
-  }
-
-  h1 {
-    margin: 0;
-    color: #fff;
-    font-size: var(--headline-size);
-    font-weight: 200;
-    letter-spacing: 0;
-    line-height: 0.88;
-    text-align: center;
-    text-shadow:
-      0 0 12px rgb(255 255 255 / 0.14),
-      0 0 42px rgb(255 255 255 / 0.08);
-    white-space: nowrap;
-  }
-
-  @media (min-width: 900px) and (min-height: 720px) {
-    .lockup {
-      --headline-top: clamp(92px, 10svh, 128px);
-    }
-  }
-
-  .benchmark-chart {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: var(--chart-top);
-    left: 50%;
-    z-index: 2;
-    width: min(680px, calc(100vw - 44px));
-    color: #fff;
-    pointer-events: auto;
-    transform: translateX(-50%);
-  }
-
-  .benchmark-copy {
-    order: 1;
-    display: grid;
-    gap: 3px;
-    margin: 0 0 10px;
-    text-align: center;
-    text-shadow:
-      0 0 10px rgb(255 255 255 / 0.12),
-      0 0 30px rgb(255 255 255 / 0.08);
-    transform: translateY(-15%);
-  }
-
-  .benchmark-kicker,
-  .benchmark-copy p {
-    margin: 0;
-    color: rgb(255 255 255 / 0.58);
-    font-size: clamp(0.82rem, calc(0.68rem + 0.42vw), 1rem);
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    line-height: 1.25;
-    text-transform: uppercase;
-  }
-
-  .bar-chart {
-    order: 3;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(34px, 1fr));
-    gap: clamp(7px, 1.7vw, 18px);
-    align-items: end;
-    min-height: clamp(116px, 22svh, 162px);
-    overflow: visible;
-    padding: clamp(32px, 4.5svh, 52px) 0 0;
-  }
-
-  .bar-group {
-    display: grid;
-    gap: 7px;
-    min-width: 0;
-  }
-
-  .bars {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(8px, 1fr));
-    gap: clamp(4px, 0.7vw, 8px);
-    align-items: end;
-    height: clamp(78px, 16svh, 118px);
-  }
-
-  .bar {
-    position: relative;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    height: 100%;
-    min-width: 0;
-    cursor: default;
-    outline: none;
-  }
-
-  .bar::after {
-    position: absolute;
-    bottom: calc(100% + 12px);
-    left: 50%;
-    z-index: 4;
-    padding: 5px 7px;
-    border: 1px solid rgb(255 255 255 / 0.16);
-    background: rgb(0 0 0 / 0.9);
-    color: rgb(255 255 255 / 0.92);
-    content: attr(data-tooltip);
-    font-size: clamp(0.68rem, calc(0.58rem + 0.26vw), 0.78rem);
-    line-height: 1;
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, 3px);
-    transition:
-      opacity 70ms ease,
-      transform 70ms ease;
-    white-space: nowrap;
-  }
-
-  .bar:hover::after,
-  .bar:focus-visible::after {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-
-  .bar-fill {
-    display: block;
-    width: 100%;
-    min-height: 5px;
-    border: 1px solid rgb(255 255 255 / 0.22);
-    background: rgb(255 255 255 / 0.32);
-    box-shadow: 0 0 16px rgb(255 255 255 / 0.08);
-    pointer-events: none;
-  }
-
-  .bar-cadical .bar-fill {
-    background: rgb(255 255 255 / 0.18);
-  }
-
-  .bar-kissat .bar-fill {
-    background: rgb(255 255 255 / 0.38);
-  }
-
-  .bar-zeta .bar-fill {
-    background: rgb(255 255 255 / 0.92);
-    box-shadow:
-      0 0 10px rgb(255 255 255 / 0.26),
-      0 0 26px rgb(255 255 255 / 0.14);
-  }
-
-  .case-label {
-    color: rgb(255 255 255 / 0.86);
-    font-size: clamp(0.7rem, calc(0.6rem + 0.3vw), 0.82rem);
-    line-height: 1;
-    text-align: center;
-  }
-
-  .benchmark-legend {
-    order: 2;
-    display: flex;
-    justify-content: center;
-    gap: clamp(12px, 2vw, 20px);
-    margin: 0 0 clamp(26px, 4svh, 44px);
-    color: rgb(255 255 255 / 0.64);
-    font-size: clamp(0.76rem, calc(0.64rem + 0.36vw), 0.9rem);
-    line-height: 1;
-    transform: translateY(-15%);
-  }
-
-  .benchmark-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    white-space: nowrap;
-  }
-
-  .benchmark-legend i {
-    display: inline-block;
-    width: 9px;
-    height: 9px;
-    border: 1px solid rgb(255 255 255 / 0.22);
-  }
-
-  .legend-cadical {
-    background: rgb(255 255 255 / 0.18);
-  }
-
-  .legend-kissat {
-    background: rgb(255 255 255 / 0.38);
-  }
-
-  .legend-zeta {
-    background: rgb(255 255 255 / 0.92);
-    box-shadow: 0 0 12px rgb(255 255 255 / 0.24);
-  }
-
-  .visual-shell {
-    position: fixed;
-    top: var(--visual-top);
-    left: 50%;
-    z-index: 0;
-    display: grid;
-    width: min(620px, calc(100vw - 48px));
-    height: var(--visual-height);
-    margin: 0;
-    pointer-events: none;
-    transform: translateX(-50%);
-  }
-
-  .visual-frame {
-    width: 100%;
-    height: 100%;
-    contain: layout paint;
-    overflow: hidden;
-    pointer-events: auto;
-  }
-
-  #visual-stage {
-    display: block;
-    width: 100%;
-    height: 100%;
-    cursor: grab;
-    outline: none;
-    touch-action: none;
-  }
-
-  #visual-stage:active {
-    cursor: grabbing;
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  @media (max-width: 620px), (max-aspect-ratio: 3 / 4) {
-    .lockup {
-      --headline-size: min(3.53rem, 4.46svh, calc((100svw - 28px) / 12.7));
-      --headline-top: clamp(58px, 8svh, 88px);
-      --visual-top: clamp(148px, 20svh, 224px);
-      --chart-bottom: clamp(150px, 14svh, 220px);
-      --chart-reserve: 214px;
-      --visual-height: min(
-        clamp(320px, 45svh, 640px),
-        calc(100svh - var(--visual-top) - var(--chart-reserve) - var(--chart-bottom) - var(--chart-gap))
-      );
-      --chart-gap: clamp(30px, 5svh, 58px);
-    }
-
-    .headline-stack {
-      top: var(--headline-top);
-    }
-
-    h1 {
-      line-height: 0.95;
-      white-space: nowrap;
-    }
-
-    .visual-shell {
-      top: var(--visual-top);
-      width: min(620px, calc(100vw - 28px));
-      height: var(--visual-height);
-    }
-
-    .visual-frame {
-      height: 100%;
-      min-height: 0;
-    }
-
-    .benchmark-chart {
-      top: auto;
-      bottom: var(--chart-bottom);
-      width: min(620px, calc(100vw - 28px));
-    }
-
-    .benchmark-copy {
-      gap: 2px;
-      margin-bottom: 7px;
-      transform: none;
-    }
-
-    .benchmark-kicker,
-    .benchmark-copy p {
-      font-size: clamp(0.78rem, 2vw, 0.9rem);
-      letter-spacing: 0.065em;
-      line-height: 1.22;
-    }
-
-    .bar-chart {
-      gap: 6px;
-      min-height: 122px;
-      padding: 46px 0 0;
-    }
-
-    .bar::after {
-      bottom: calc(100% + 16px);
-    }
-
-    .bars {
-      gap: 3px;
-      height: 76px;
-    }
-
-    .case-label {
-      font-size: clamp(0.72rem, 1.9vw, 0.82rem);
-    }
-
-    .benchmark-legend {
-      justify-content: center;
-      gap: 9px;
-      margin: 0 0 18px;
-      font-size: clamp(0.76rem, 2vw, 0.86rem);
-      transform: none;
-    }
-
-    .benchmark-legend i {
-      width: 8px;
-      height: 8px;
-    }
-
-  }
-</style>

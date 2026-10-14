@@ -6,7 +6,8 @@ const isBuild =
 export default defineConfig({
   site: "https://eschatonscience.github.io",
   output: "static",
+  devToolbar: { enabled: false },
   vite: {
-    base: isBuild ? "" : "/",
+    base: isBuild ? "" : undefined,
   },
 });

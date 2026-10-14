@@ -4,6 +4,7 @@ node_modules/
 # Astro local build/cache
 dist/
 .astro/
+.codex/
 
 # Local environment
 .env
@@ -24,5 +25,3 @@ Desktop.ini
 .vscode/
 .idea/
 
-# Local verification artifacts
-.astro-http-check.png
