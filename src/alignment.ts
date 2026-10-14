@@ -113,7 +113,19 @@ export function createAlignment(canvas: HTMLCanvasElement, matrixFrame: HTMLElem
         );
       }
 
-      vec3 moon(vec3 background, vec2 uv, vec2 center, float radius, float warm, float phase, float lightPhase, float reflectedLight, vec3 rimWidths, vec3 rimStrengths) {
+      vec3 radianceForDisplay(vec3 displayColor) {
+        vec3 mapped = mix(
+          displayColor / 12.92,
+          pow((displayColor + 0.055) / 1.055, vec3(2.4)),
+          step(vec3(0.04045), displayColor)
+        );
+        // Positive root of the rational tone curve used by filmResponse.
+        vec3 a = 2.51 - 2.43 * mapped;
+        vec3 b = 0.03 - 0.59 * mapped;
+        return (-b + sqrt(b * b + 0.56 * a * mapped)) / (2.0 * a);
+      }
+
+      vec3 moon(vec3 background, vec2 uv, vec2 center, float radius, float warm, float phase, float lightPhase, float reflectedLight, float shadowBrightness, vec3 rimWidths, vec3 rimStrengths) {
         float aspect = resolution.x / resolution.y;
         vec2 p = (uv - center) * vec2(aspect, -1.0) / radius;
         float distance = length(p);
@@ -140,19 +152,29 @@ export function createAlignment(canvas: HTMLCanvasElement, matrixFrame: HTMLElem
 
         vec3 normal = vec3(p, sqrt(max(0.0, 1.0 - dot(p, p))));
         vec3 surface = rotateSurface(normal, phase);
-        float terrain = clouds(surface * mix(13.0, 7.0, warm));
-        float detail = noise(surface * 68.0);
+        float terrainScale = shadowBrightness > 0.0 ? 7.0 : mix(13.0, 7.0, warm);
+        float terrain = clouds(surface * terrainScale);
+        float detailScale = shadowBrightness > 0.0 ? 24.0 : 68.0;
+        float detail = noise(surface * detailScale);
         float pits = smoothstep(0.32, 0.63, terrain + detail * 0.13);
-        vec3 stone = vec3(0.24, 0.26, 0.29) * (0.43 + pits * 0.85);
+        float granite = 0.43 + pits * 0.85;
+        if (shadowBrightness > 0.0) {
+          // Use the red moon's layered terrain, retaining a little granite grain.
+          float mottling = (0.45 + terrain * 0.75) * (0.90 + detail * 0.10);
+          granite = mix(mottling, granite, 0.20);
+        }
+        vec3 stone = vec3(0.24, 0.26, 0.29) * granite;
         vec3 volcanic = mix(vec3(0.15, 0.045, 0.055), vec3(0.42, 0.20, 0.16), terrain);
         volcanic *= 0.62 + detail * 0.38;
         vec3 albedo = mix(stone, volcanic, warm);
+        float reliefScale = shadowBrightness > 0.0 ? 9.0 : 47.0;
         vec3 relief = vec3(
-          noise(surface * 47.0 + vec3(3.0, 0.0, 0.0)),
-          noise(surface * 47.0 + vec3(0.0, 7.0, 0.0)),
-          noise(surface * 47.0 + vec3(0.0, 0.0, 11.0))
+          noise(surface * reliefScale + vec3(3.0, 0.0, 0.0)),
+          noise(surface * reliefScale + vec3(0.0, 7.0, 0.0)),
+          noise(surface * reliefScale + vec3(0.0, 0.0, 11.0))
         ) - 0.5;
-        vec3 roughNormal = normalize(normal + relief * 0.045 * normal.z);
+        float reliefStrength = shadowBrightness > 0.0 ? 0.016 : 0.045;
+        vec3 roughNormal = normalize(normal + relief * reliefStrength * normal.z);
         float incidence = dot(roughNormal, lightDirection);
         float diffuse = max(incidence, 0.0);
         float terminator = smoothstep(-0.012, 0.035, incidence);
@@ -162,6 +184,12 @@ export function createAlignment(canvas: HTMLCanvasElement, matrixFrame: HTMLElem
         float fill = 0.36 + 0.64 * max(dot(normal, normalize(vec3(0.12, -0.45, 0.88))), 0.0);
         vec3 fillColor = mix(vec3(0.70, 0.76, 0.87), vec3(0.68, 0.50, 0.62), warm);
         color += albedo * fillColor * reflectedLight * fill;
+        if (shadowBrightness > 0.0) {
+          // Give the granite a visible surface level in display space.
+          // Inverting the tone curve preserves that level in the final image.
+          vec3 shadowSurface = vec3(0.94, 0.97, 1.0) * shadowBrightness * granite * fill;
+          color = max(color, radianceForDisplay(shadowSurface));
+        }
         float coverage = 1.0 - smoothstep(1.0 - edge, 1.0 + edge, distance);
         return mix(background, color, coverage) + glow;
       }
@@ -216,15 +244,15 @@ export function createAlignment(canvas: HTMLCanvasElement, matrixFrame: HTMLElem
           color += stars(sky + 34.0, 187.0, 0.998) * 0.25;
         }
 
-        color = moon(color, uv, vec2(0.5, 0.090), 0.016, 0.0, 0.4, -0.79, 0.045,
+        color = moon(color, uv, vec2(0.5, 0.090), 0.016, 0.0, 0.4, -0.79, 0.0, 0.24,
           vec3(0.025, 0.100, 0.200), vec3(0.320, 0.060, 0.018));
-        color = moon(color, uv, vec2(0.5, 0.171), 0.0090, 0.0, 2.2, -0.85, 0.025,
+        color = moon(color, uv, vec2(0.5, 0.171), 0.0090, 0.0, 2.2, -0.85, 0.025, 0.0,
           vec3(0.040, 0.150, 0.280), vec3(0.280, 0.055, 0.019));
-        color = moon(color, uv, vec2(0.5, 0.435), 0.0042, 0.0, 3.7, -0.87, 0.022,
+        color = moon(color, uv, vec2(0.5, 0.435), 0.0042, 0.0, 3.7, -0.87, 0.022, 0.0,
           vec3(0.075, 0.145, 0.220), vec3(0.160, 0.035, 0.006));
-        color = moon(color, uv, vec2(0.5, 0.583), 0.069, 1.0, 1.1, -0.82, 0.115,
+        color = moon(color, uv, vec2(0.5, 0.583), 0.069, 1.0, 1.1, -0.82, 0.115, 0.0,
           vec3(0.012, 0.100, 0.220), vec3(0.420, 0.105, 0.039));
-        color = moon(color, uv, vec2(0.5, 0.724), 0.0060, 0.0, 5.4, -0.85, 0.030,
+        color = moon(color, uv, vec2(0.5, 0.724), 0.0060, 0.0, 5.4, -0.85, 0.030, 0.0,
           vec3(0.055, 0.130, 0.220), vec3(0.220, 0.048, 0.011));
         color = jupiter(color, uv);
 

@@ -119,7 +119,7 @@ const rows = [
         background-size: 100% 100%;
         background-repeat: no-repeat;
         filter: var(--number-bloom);
-        opacity: 0.6;
+        opacity: 0.72;
       }
 
       @media (max-height: 520px) {
@@ -172,6 +172,10 @@ const rows = [
 <script>
   import { createAlignment } from "../alignment";
   import { createNumberLight } from "../number-light";
+
+  console.info(
+    '"At the first blush it seems to us that the theories last only a day and that ruins upon ruins accumulate. Today the theories are born, tomorrow they are the fashion, the day after tomorrow they are classic, the fourth day they are superannuated, and the fifth they are forgotten. But if we look more closely, we see that what thus succumb are the theories, properly so called, those which pretend to teach us what things are. But there is in them something which usually survives. If one of them has taught us a true relation, this relation is definitively acquired, and it will be found again under a new disguise in the other theories which will successively come to reign in place of the old." — Henri Poincaré'
+  );
 
   const page = document.querySelector<HTMLElement>("main")!;
   const canvas = document.querySelector<HTMLCanvasElement>("#alignment")!;
