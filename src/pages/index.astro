@@ -1,9 +1,9 @@
 ---
 const rows = [
-  [80, 40, 180, 440, 180, 40],
-  [4, 14, 8, 0, 8, 14],
-  [52, 26, 117, 286, 117, 26],
-  [24, 12, 54, 132, 54, 12],
+  [-85020, -170430, 3315, -482820, -974805, 6240],
+  [-352422, 58338, 63, 16128, 78813, -429912],
+  [6240, -85020, -170430, 3315, -482820, -974805],
+  [-92106, -122976, 98784, 124929, 417564, 438669],
 ];
 ---
 
@@ -58,6 +58,7 @@ const rows = [
         display: block;
         width: 100%;
         height: 100%;
+        object-fit: cover;
         z-index: 0;
       }
 
@@ -65,17 +66,28 @@ const rows = [
         position: absolute;
         top: 29%;
         left: 50%;
-        width: min(34rem, calc(100% - 40px));
-        padding: clamp(10px, 1.2svh, 16px) clamp(12px, 2vw, 24px);
+        width: min(29em, calc(100% - 24px));
+        font-size: clamp(0.625rem, min(3.6vw, 2.7svh), 1.8rem);
+        padding: clamp(10px, 1.2svh, 16px) clamp(4px, 1vw, 20px);
         transform: translate(-50%, -50%);
         z-index: 1;
+      }
+
+      .matrix-frame::before {
+        content: "";
+        position: absolute;
+        inset: -6px -32px;
+        z-index: -1;
+        border-radius: 16px;
+        background: #000;
+        pointer-events: none;
       }
 
       .matrix {
         width: 100%;
         table-layout: fixed;
         border-collapse: collapse;
-        font-size: clamp(1.125rem, min(3.6vw, 2.7svh), 1.8rem);
+        font-size: inherit;
         font-variant-numeric: lining-nums tabular-nums;
         font-family: "Matrix Serif", "Cambria Math", serif;
         line-height: 1;
@@ -125,12 +137,8 @@ const rows = [
       @media (max-height: 520px) {
         .matrix-frame {
           top: 31%;
-          width: min(26rem, calc(100% - 40px));
           padding-block: 4px;
-        }
-
-        .matrix {
-          font-size: clamp(0.75rem, 2.7svh, 1rem);
+          font-size: clamp(0.625rem, min(3.6vw, 2.7svh), 1rem);
         }
 
         .matrix td {
@@ -151,9 +159,9 @@ const rows = [
           </filter>
         </defs>
       </svg>
-      <canvas id="alignment" aria-hidden="true"></canvas>
+      <img id="alignment" src="/scene.png" width="3840" height="2160" alt="" decoding="sync" fetchpriority="high" />
       <div class="matrix-frame">
-        <table class="matrix" aria-label="N" style="--number-bloom: url(#number-glow-bloom);">
+        <table class="matrix" aria-label="M square" style="--number-bloom: url(#number-glow-bloom);">
           <tbody>
             {rows.map((row) => (
               <tr>
@@ -170,7 +178,6 @@ const rows = [
 </html>
 
 <script>
-  import { createAlignment } from "../alignment";
   import { createNumberLight } from "../number-light";
 
   console.info(
@@ -178,29 +185,27 @@ const rows = [
   );
 
   const page = document.querySelector<HTMLElement>("main")!;
-  const canvas = document.querySelector<HTMLCanvasElement>("#alignment")!;
-  const frame = document.querySelector<HTMLElement>(".matrix-frame")!;
+  const background = document.querySelector<HTMLImageElement>("#alignment")!;
   const matrix = document.querySelector<HTMLTableElement>(".matrix")!;
   let disposed = false;
-  let alignment: ReturnType<typeof createAlignment> | undefined;
   let observer: ResizeObserver | undefined;
 
   async function startScene() {
-    await document.fonts.load('400 16px "Matrix Serif"');
+    await Promise.all([
+      document.fonts.load('400 16px "Matrix Serif"'),
+      background.decode(),
+    ]);
     if (disposed) return;
 
-    alignment = createAlignment(canvas, frame);
     const lightNumbers = createNumberLight(matrix);
     const render = () => {
       if (disposed) return;
       lightNumbers();
-      alignment!.render();
       page.classList.add("scene-ready");
     };
 
     render();
     observer = new ResizeObserver(render);
-    observer.observe(page);
     observer.observe(matrix);
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) render();
@@ -212,6 +217,5 @@ const rows = [
     if (event.persisted) return;
     disposed = true;
     observer?.disconnect();
-    alignment?.dispose();
   });
 </script>

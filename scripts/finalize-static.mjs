@@ -27,8 +27,12 @@ const html = makeLocalAssetPaths(await readFile(distIndex, "utf8"));
 await writeFile(rootIndex, html);
 
 await removeOutput("_astro");
-await cp(distAstro, join(root, "_astro"), { recursive: true });
+const astroAssets = await lstat(distAstro).catch((error) => {
+  if (error.code !== "ENOENT") throw error;
+});
+if (astroAssets) await cp(distAstro, join(root, "_astro"), { recursive: true });
 await removeOutput("fonts");
 await cp(join(dist, "fonts"), join(root, "fonts"), { force: true, recursive: true });
+await cp(join(dist, "scene.png"), join(root, "scene.png"), { force: true });
 await writeFile(join(root, ".nojekyll"), "");
 await removeOutput("dist");
